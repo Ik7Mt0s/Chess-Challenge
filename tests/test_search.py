@@ -1,80 +1,128 @@
+
 import chess
 
 from chess_engine.evaluation.heuristic import HeuristicEvaluator
 from chess_engine.search.negamax import (
     INFINITY,
+    MATE_SCORE,
     negamax,
 )
+from chess_engine.search.quiescence import quiescence
 from chess_engine.utils.time_manager import TimeManager
 
 
-def test_initial_position_is_balanced():
-    board = chess.Board()
-    evaluator = HeuristicEvaluator()
-    timer = TimeManager(5.0)
-
-    score = negamax(
-        board,
-        depth=0,
+def run_search(board: chess.Board, depth: int) -> int:
+    return negamax(
+        board=board,
+        depth=depth,
         alpha=-INFINITY,
         beta=INFINITY,
-        evaluator=evaluator,
-        timer=timer,
+        evaluator=HeuristicEvaluator(),
+        timer=TimeManager(10.0),
     )
 
-    assert score == 0
+
+def run_quiescence(board: chess.Board) -> int:
+    return quiescence(
+        board=board,
+        alpha=-INFINITY,
+        beta=INFINITY,
+        evaluator=HeuristicEvaluator(),
+        timer=TimeManager(10.0),
+    )
 
 
-def test_search_does_not_modify_board():
+def test_depth_zero_initial_position():
+    board = chess.Board()
+
+    assert run_search(board, depth=0) == 0
+
+
+def test_negamax_does_not_modify_board():
     board = chess.Board()
     original_fen = board.fen()
-    evaluator = HeuristicEvaluator()
-    timer = TimeManager(5.0)
 
-    negamax(
-        board,
-        depth=2,
-        alpha=-INFINITY,
-        beta=INFINITY,
-        evaluator=evaluator,
-        timer=timer,
-    )
+    run_search(board, depth=2)
 
     assert board.fen() == original_fen
     assert len(board.move_stack) == 0
 
 
-def test_checkmate_has_negative_score():
+def test_checkmate_returns_negative_score():
     board = chess.Board()
+    board.push_san("f3")
+    board.push_san("e5")
+    board.push_san("g4")
+    board.push_san("Qh4#")
 
-    for move in ["f3", "e5", "g4", "Qh4#"]:
-        board.push_san(move)
+    score = run_search(board, depth=2)
 
-    score = negamax(
-        board,
-        depth=2,
-        alpha=-INFINITY,
-        beta=INFINITY,
-        evaluator=HeuristicEvaluator(),
-        timer=TimeManager(5.0),
-    )
-
-    assert score < -90_000
+    assert score <= -MATE_SCORE + 10
 
 
-def test_stalemate_is_draw():
+def test_stalemate_returns_zero():
     board = chess.Board(
         "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1"
     )
 
-    score = negamax(
-        board,
-        depth=2,
-        alpha=-INFINITY,
-        beta=INFINITY,
-        evaluator=HeuristicEvaluator(),
-        timer=TimeManager(5.0),
+    assert board.is_stalemate()
+    assert run_search(board, depth=2) == 0
+
+
+def test_quiescence_does_not_modify_board():
+    board = chess.Board(
+        "4k3/8/8/8/3q4/8/3R4/4K3 w - - 0 1"
     )
 
-    assert board.is_stalemate()
-    assert score == 0
+    original_fen = board.fen()
+
+    run_quiescence(board)
+
+    assert board.fen() == original_fen
+
+
+def test_quiescence_recognizes_free_capture():
+    board = chess.Board(
+        "4k3/8/8/8/3q4/8/3R4/4K3 w - - 0 1"
+    )
+
+    # A torre branca em d2 pode capturar a dama
+    # preta em d4? Não diretamente: existe d3.
+    # Como d3 está vazio, a captura é legal.
+    assert chess.Move.from_uci("d2d4") in board.legal_moves
+
+    static_score = HeuristicEvaluator().evaluate(board)
+    tactical_score = run_quiescence(board)
+
+    assert tactical_score > static_score
+
+
+def test_quiescence_handles_checkmate():
+    board = chess.Board()
+    board.push_san("f3")
+    board.push_san("e5")
+    board.push_san("g4")
+    board.push_san("Qh4#")
+
+    assert run_quiescence(board) <= -MATE_SCORE + 10
+
+
+def test_quiescence_handles_check():
+    board = chess.Board(
+        "4k3/8/8/8/8/8/4r3/4K3 w - - 0 1"
+    )
+
+    assert board.is_check()
+
+    original_fen = board.fen()
+    run_quiescence(board)
+
+    assert board.fen() == original_fen
+
+
+def test_quiescence_recognizes_stalemate():
+    board = chess.Board(
+        "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1"
+    )
+
+    assert run_quiescence(board) == 0
