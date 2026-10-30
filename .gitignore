@@ -1,11 +1,11 @@
+# Ambiente virtual
+.venv/
+venv/
 
 # Python
 __pycache__/
 *.py[cod]
-
-# Ambiente virtual
-.venv/
-venv/
+*.egg-info/
 
 # Testes
 .pytest_cache/
@@ -16,10 +16,20 @@ htmlcov/
 .vscode/
 .idea/
 
-# Sistema
+# Sistema operacional
 .DS_Store
 Thumbs.db
 
-# Arquivos locais
+# Configuracoes locais
 .env
 *.log
+
+# Modelos de IA
+*.gguf
+*.onnx
+*.safetensors
+models/weights/
+
+# Build
+build/
+dist/
