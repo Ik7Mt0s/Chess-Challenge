@@ -1,0 +1,25 @@
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Ambiente virtual
+.venv/
+venv/
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos locais
+.env
+*.log
