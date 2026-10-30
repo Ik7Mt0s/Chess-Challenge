@@ -1,0 +1,10 @@
+[Event "Chess Challenge III - Self Play"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "ChessEngine"]
+[Black "ChessEngine"]
+[Result "1-0"]
+
+1. Nf3 Nf6 2. Nc3 Nc6 3. h4 h5 4. e4 e5 5. Bc4 Bd6 6. d4 a5 7. Be3 g6 8. a4 b6 9. d5 Ne7 10. g3 c5 11. b3 Rg8 12. Bd3 Ba6 13. Ng5 Bxd3 14. cxd3 Rh8 15. f4 Rg8 16. Nf3 Qb8 17. Nb5 Ng4 18. Ke2 f5 19. b4 cxb4 20. Nxd6+ Qxd6 21. fxe5 Nxe5 22. Nxe5 Qxe5 23. Bf4 Qb2+ 24. Qd2 Qxd2+ 25. Kxd2 b3 26. Kc3 fxe4 27. dxe4 g5 28. hxg5 d6 29. Kxb3 Rh8 30. Bxd6 Kf7 31. Be5 Rhe8 32. d6 Nc6 33. Rhf1+ Kg8 34. Bf6 Rxe4 35. Bc3 Rg4 36. Bf6 Rxg3+ 37. Kc4 h4 38. Kb5 Rc8 39. Kxb6 h3 40. Kb7 Rb8+ 41. Kxc6 h2 42. d7 Rd3 43. Rh1 Kf8 44. Kc7 Ra8 45. d8=Q+ Raxd8 46. Bxd8 Rc3+ 47. Kb6 Rb3+ 48. Kxa5 Rb8 49. Bf6 Ra8+ 50. Kb6 Rb8+ 51. Kc7 Re8 52. Rxh2 Re4 53. g6 Rc4+ 54. Kd8 Rc8+ 55. Kxc8 Kg8 56. Rh8# 1-0
+
