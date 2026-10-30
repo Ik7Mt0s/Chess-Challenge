@@ -1,7 +1,16 @@
 import chess
 
 from chess_engine.evaluation.base import PositionEvaluator
-from chess_engine.search.move_ordering import order_moves
+from chess_engine.search.metrics import SearchMetrics
+from chess_engine.search.move_ordering import (
+    MoveOrderingHeuristics,
+    order_moves,
+)
+from chess_engine.search.quiescence import quiescence
+from chess_engine.search.transposition import (
+    BoundType,
+    TranspositionTable,
+)
 from chess_engine.utils.time_manager import TimeManager
 
 
@@ -17,8 +26,14 @@ def negamax(
     evaluator: PositionEvaluator,
     timer: TimeManager,
     ply: int = 0,
+    transposition_table: TranspositionTable | None = None,
+    metrics: SearchMetrics | None = None,
+    ordering_heuristics: MoveOrderingHeuristics | None = None,
 ) -> int:
     timer.check()
+
+    if metrics is not None:
+        metrics.negamax_nodes += 1
 
     if board.is_checkmate():
         return -MATE_SCORE + ply
@@ -33,14 +48,57 @@ def negamax(
         return 0
 
     if depth <= 0:
-        score = evaluator.evaluate(board)
-        return score if board.turn == chess.WHITE else -score
+        return quiescence(
+            board=board,
+            alpha=alpha,
+            beta=beta,
+            evaluator=evaluator,
+            timer=timer,
+            ply=ply,
+            metrics=metrics,
+        )
+
+    original_alpha = alpha
+    original_beta = beta
+    cached_move = None
+
+    if transposition_table is not None:
+        entry = transposition_table.get(
+            board,
+            ply=ply,
+        )
+
+        if entry is not None:
+            cached_move = entry.best_move
+
+            if entry.depth >= depth:
+                if entry.bound == BoundType.EXACT:
+                    return entry.score
+
+                if entry.bound == BoundType.LOWER:
+                    alpha = max(alpha, entry.score)
+
+                elif entry.bound == BoundType.UPPER:
+                    beta = min(beta, entry.score)
+
+                if alpha >= beta:
+                    if metrics is not None:
+                        metrics.alpha_beta_cutoffs += 1
+
+                    return entry.score
 
     best_score = -INFINITY
+    best_move = None
 
-    for move in order_moves(board):
+    moves = order_moves(
+        board,
+        ply=ply,
+        heuristics=ordering_heuristics,
+        tt_move=cached_move,
+    )
+
+    for move in moves:
         timer.check()
-
         board.push(move)
 
         try:
@@ -52,14 +110,48 @@ def negamax(
                 evaluator=evaluator,
                 timer=timer,
                 ply=ply + 1,
+                transposition_table=transposition_table,
+                metrics=metrics,
+                ordering_heuristics=ordering_heuristics,
             )
         finally:
             board.pop()
 
-        best_score = max(best_score, score)
+        if score > best_score:
+            best_score = score
+            best_move = move
+
         alpha = max(alpha, score)
 
         if alpha >= beta:
+            if metrics is not None:
+                metrics.alpha_beta_cutoffs += 1
+
+            if ordering_heuristics is not None:
+                ordering_heuristics.record_cutoff(
+                    board=board,
+                    move=move,
+                    ply=ply,
+                    depth=depth,
+                )
+
             break
+
+    if transposition_table is not None:
+        if best_score <= original_alpha:
+            bound = BoundType.UPPER
+        elif best_score >= original_beta:
+            bound = BoundType.LOWER
+        else:
+            bound = BoundType.EXACT
+
+        transposition_table.store(
+            board=board,
+            depth=depth,
+            score=best_score,
+            bound=bound,
+            best_move=best_move,
+            ply=ply,
+        )
 
     return best_score
