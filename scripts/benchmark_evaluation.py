@@ -4,6 +4,7 @@ import argparse
 import csv
 import sys
 from pathlib import Path
+from time import perf_counter
 
 import chess
 
@@ -94,7 +95,12 @@ POSITIONS = (
 )
 
 
-def benchmark(depth: int, time_limit: float, output: Path) -> list[dict]:
+def benchmark(
+    depth: int,
+    time_limit: float,
+    evaluation_repetitions: int,
+    output: Path,
+) -> list[dict]:
     evaluators = (
         ("baseline", BaselineEvaluator()),
         ("passo_3", HeuristicEvaluator()),
@@ -108,6 +114,14 @@ def benchmark(depth: int, time_limit: float, output: Path) -> list[dict]:
             raise ValueError(f"Posição inválida no benchmark: {position_name}")
 
         for evaluator_name, evaluator in evaluators:
+            for _ in range(min(20, evaluation_repetitions)):
+                evaluator.evaluate(board)
+
+            evaluation_start = perf_counter()
+            for _ in range(evaluation_repetitions):
+                evaluator.evaluate(board)
+            evaluation_seconds = perf_counter() - evaluation_start
+
             engine = ChessEngine(
                 evaluator=evaluator,
                 max_depth=depth,
@@ -119,6 +133,15 @@ def benchmark(depth: int, time_limit: float, output: Path) -> list[dict]:
                 "position": position_name,
                 "evaluator": evaluator_name,
                 "static_score_cp_white": evaluator.evaluate(board),
+                "static_evaluation_repetitions": evaluation_repetitions,
+                "static_evaluation_seconds": round(
+                    evaluation_seconds,
+                    4,
+                ),
+                "static_evaluations_per_second": round(
+                    evaluation_repetitions / evaluation_seconds,
+                    1,
+                ),
                 "move_uci": result.move.uci(),
                 "search_score_cp_side_to_move": result.score,
                 "depth": result.depth,
@@ -135,6 +158,7 @@ def benchmark(depth: int, time_limit: float, output: Path) -> list[dict]:
                 f"{position_name:14} | {evaluator_name:8} | "
                 f"lance={row['move_uci']:5} | "
                 f"estática={row['static_score_cp_white']:+5} cp | "
+                f"avaliações/s={row['static_evaluations_per_second']:>7} | "
                 f"prof={row['depth']} | "
                 f"tempo={row['elapsed_seconds']:.3f}s | "
                 f"nós={row['total_nodes']}"
@@ -156,6 +180,7 @@ def main() -> None:
     )
     parser.add_argument("--depth", type=int, default=2)
     parser.add_argument("--time", type=float, default=10.0)
+    parser.add_argument("--evaluation-repetitions", type=int, default=1000)
     parser.add_argument(
         "--output",
         type=Path,
@@ -167,8 +192,15 @@ def main() -> None:
         parser.error("--depth deve ser pelo menos 1")
     if args.time <= 0:
         parser.error("--time deve ser maior que zero")
+    if args.evaluation_repetitions < 1:
+        parser.error("--evaluation-repetitions deve ser positivo")
 
-    benchmark(args.depth, args.time, args.output)
+    benchmark(
+        args.depth,
+        args.time,
+        args.evaluation_repetitions,
+        args.output,
+    )
 
 
 if __name__ == "__main__":
