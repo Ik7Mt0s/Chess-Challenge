@@ -1,9 +1,8 @@
-"""Compara a avaliação original com a avaliação posicional atual."""
-
 import argparse
 import csv
 import sys
 from pathlib import Path
+from statistics import median
 from time import perf_counter
 
 import chess
@@ -99,6 +98,7 @@ def benchmark(
     depth: int,
     time_limit: float,
     evaluation_repetitions: int,
+    repetitions: int,
     output: Path,
 ) -> list[dict]:
     evaluators = (
@@ -117,23 +117,48 @@ def benchmark(
             for _ in range(min(20, evaluation_repetitions)):
                 evaluator.evaluate(board)
 
-            evaluation_start = perf_counter()
-            for _ in range(evaluation_repetitions):
-                evaluator.evaluate(board)
-            evaluation_seconds = perf_counter() - evaluation_start
+            evaluation_times = []
+            results = []
 
-            engine = ChessEngine(
-                evaluator=evaluator,
-                max_depth=depth,
-                use_transposition_table=False,
-                use_advanced_ordering=True,
+            for _ in range(repetitions):
+                evaluation_start = perf_counter()
+                for _ in range(evaluation_repetitions):
+                    evaluator.evaluate(board)
+                evaluation_times.append(
+                    perf_counter() - evaluation_start
+                )
+
+                engine = ChessEngine(
+                    evaluator=evaluator,
+                    max_depth=depth,
+                    use_transposition_table=False,
+                    use_advanced_ordering=True,
+                )
+                results.append(
+                    engine.best_move(board, time_limit=time_limit)
+                )
+
+            evaluation_seconds = median(evaluation_times)
+            search_seconds = median(result.elapsed for result in results)
+            total_nodes = median(
+                result.metrics.get("total_nodes", 0)
+                for result in results
             )
-            result = engine.best_move(board, time_limit=time_limit)
+            quiescence_nodes = median(
+                result.metrics.get("quiescence_nodes", 0)
+                for result in results
+            )
+            scores = [result.score for result in results]
+            depths = [result.depth for result in results]
+            result = results[0]
+            distinct_moves = len({item.move for item in results})
+
             row = {
                 "position": position_name,
                 "evaluator": evaluator_name,
                 "static_score_cp_white": evaluator.evaluate(board),
                 "static_evaluation_repetitions": evaluation_repetitions,
+                "benchmark_repetitions": repetitions,
                 "static_evaluation_seconds": round(
                     evaluation_seconds,
                     4,
@@ -143,15 +168,15 @@ def benchmark(
                     1,
                 ),
                 "move_uci": result.move.uci(),
-                "search_score_cp_side_to_move": result.score,
-                "depth": result.depth,
-                "status": result.status,
-                "elapsed_seconds": round(result.elapsed, 4),
-                "total_nodes": result.metrics.get("total_nodes", 0),
-                "quiescence_nodes": result.metrics.get(
-                    "quiescence_nodes",
-                    0,
-                ),
+                "median_search_score_cp_side_to_move": median(scores),
+                "distinct_scores_across_repetitions": len(set(scores)),
+                "distinct_moves_across_repetitions": distinct_moves,
+                "min_completed_depth": min(depths),
+                "max_completed_depth": max(depths),
+                "status": "/".join(sorted({item.status for item in results})),
+                "median_elapsed_seconds": round(search_seconds, 4),
+                "median_total_nodes": int(total_nodes),
+                "median_quiescence_nodes": int(quiescence_nodes),
             }
             rows.append(row)
             print(
@@ -159,9 +184,11 @@ def benchmark(
                 f"lance={row['move_uci']:5} | "
                 f"estática={row['static_score_cp_white']:+5} cp | "
                 f"avaliações/s={row['static_evaluations_per_second']:>7} | "
-                f"prof={row['depth']} | "
-                f"tempo={row['elapsed_seconds']:.3f}s | "
-                f"nós={row['total_nodes']}"
+                f"prof={row['min_completed_depth']}-"
+                f"{row['max_completed_depth']} | "
+                f"mediana={row['median_elapsed_seconds']:.3f}s | "
+                f"nós={row['median_total_nodes']} | "
+                f"lances distintos={distinct_moves}"
             )
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -181,6 +208,7 @@ def main() -> None:
     parser.add_argument("--depth", type=int, default=2)
     parser.add_argument("--time", type=float, default=10.0)
     parser.add_argument("--evaluation-repetitions", type=int, default=1000)
+    parser.add_argument("--repetitions", type=int, default=5)
     parser.add_argument(
         "--output",
         type=Path,
@@ -194,11 +222,14 @@ def main() -> None:
         parser.error("--time deve ser maior que zero")
     if args.evaluation_repetitions < 1:
         parser.error("--evaluation-repetitions deve ser positivo")
+    if args.repetitions < 3:
+        parser.error("--repetitions deve ser pelo menos 3")
 
     benchmark(
         args.depth,
         args.time,
         args.evaluation_repetitions,
+        args.repetitions,
         args.output,
     )
 

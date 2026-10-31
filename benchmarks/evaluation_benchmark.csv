@@ -1,9 +1,9 @@
-position,evaluator,static_score_cp_white,static_evaluation_repetitions,static_evaluation_seconds,static_evaluations_per_second,move_uci,search_score_cp_side_to_move,depth,status,elapsed_seconds,total_nodes,quiescence_nodes
-Abertura,baseline,0,5000,0.166,30127.8,g1f3,0,2,completed,0.0393,140,60
-Abertura,passo_3,0,5000,0.4413,11330.1,g1f3,0,2,completed,0.047,140,60
-Meio-jogo,baseline,350,5000,0.1406,35563.0,d2d4,355,2,completed,0.9695,2215,2009
-Meio-jogo,passo_3,395,5000,0.4306,11612.5,d2d4,399,2,completed,1.6332,2600,2396
-Final,baseline,0,5000,0.1002,49892.2,f2f4,0,2,completed,0.0183,74,33
-Final,passo_3,0,5000,0.1591,31430.0,f2f4,0,2,completed,0.0204,75,33
-Peão passado,baseline,120,5000,0.0781,64053.5,e6e7,900,2,completed,0.0249,91,57
-Peão passado,passo_3,170,5000,0.1246,40139.6,e6e7,898,2,completed,0.0291,99,65
+position,evaluator,static_score_cp_white,static_evaluation_repetitions,benchmark_repetitions,static_evaluation_seconds,static_evaluations_per_second,move_uci,median_search_score_cp_side_to_move,distinct_scores_across_repetitions,distinct_moves_across_repetitions,min_completed_depth,max_completed_depth,status,median_elapsed_seconds,median_total_nodes,median_quiescence_nodes
+Abertura,baseline,0,2000,3,0.0592,33771.1,g1f3,0,1,1,2,2,completed,0.0403,140,60
+Abertura,passo_3,0,2000,3,0.1423,14057.9,g1f3,0,1,1,2,2,completed,0.0459,140,60
+Meio-jogo,baseline,350,2000,3,0.053,37742.1,d2d4,355,1,1,2,2,completed,1.0825,2215,2009
+Meio-jogo,passo_3,395,2000,3,0.1464,13657.0,d2d4,399,1,1,2,2,completed,1.1523,2600,2396
+Final,baseline,0,2000,3,0.0299,66973.9,f2f4,0,1,1,2,2,completed,0.013,74,33
+Final,passo_3,0,2000,3,0.048,41664.8,f2f4,0,1,1,2,2,completed,0.019,75,33
+Peão passado,baseline,120,2000,3,0.0313,63927.0,e6e7,900,1,1,2,2,completed,0.0249,91,57
+Peão passado,passo_3,170,2000,3,0.0418,47833.4,e6e7,898,1,1,2,2,completed,0.0287,99,65
