@@ -14,67 +14,231 @@ class HeuristicEvaluator(PositionEvaluator):
         chess.KING: 0,
     }
 
-    CENTER_BONUS = {
-        chess.KNIGHT: 8,
-        chess.BISHOP: 4,
+    PHASE_WEIGHTS = {
+        chess.KNIGHT: 1,
+        chess.BISHOP: 1,
+        chess.ROOK: 2,
+        chess.QUEEN: 4,
     }
+    MAX_PHASE = 24
 
-    PAWN_ADVANCE_BONUS = 5
+    MOBILITY_WEIGHTS = {
+        chess.KNIGHT: 4,
+        chess.BISHOP: 3,
+        chess.ROOK: 2,
+        chess.QUEEN: 1,
+    }
+    MAX_MOBILITY = 14
+
+    DOUBLED_PAWN_PENALTY = 16
+    ISOLATED_PAWN_PENALTY = 12
+    PASSED_PAWN_BONUS = (0, 0, 8, 16, 28, 45, 70, 105)
 
     def evaluate(self, board: chess.Board) -> int:
         """
-        Avalia a posição do ponto de vista das brancas.
-
-        Pontuação positiva: vantagem das brancas.
-        Pontuação negativa: vantagem das pretas.
+        Retorna uma pontuação positiva para vantagem das brancas.
         """
-        score = 0
+        phase = self._game_phase(board)
+        white_score = 0
+        black_score = 0
 
-        for piece_type, value in self.PIECE_VALUES.items():
-            for color in (chess.WHITE, chess.BLACK):
-                sign = 1 if color == chess.WHITE else -1
+        for color in (chess.WHITE, chess.BLACK):
+            side_score = 0
 
+            for piece_type, material in self.PIECE_VALUES.items():
                 for square in board.pieces(piece_type, color):
-                    score += sign * value
-
-                    score += sign * self._positional_score(
+                    side_score += material
+                    side_score += self._piece_square_score(
                         piece_type,
                         square,
                         color,
+                        phase,
                     )
 
-        return score
+            side_score += self._pawn_structure(board, color)
+            side_score += self._king_safety(board, color, phase)
+            side_score += self._mobility(board, color)
 
-    def _positional_score(
-        self,
+            if color == chess.WHITE:
+                white_score = side_score
+            else:
+                black_score = side_score
+
+        return white_score - black_score
+
+    @classmethod
+    def _game_phase(cls, board: chess.Board) -> int:
+        """Retorna 0 no final e 24 na posição inicial."""
+        phase = 0
+
+        for piece_type, weight in cls.PHASE_WEIGHTS.items():
+            phase += len(board.pieces(piece_type, chess.WHITE)) * weight
+            phase += len(board.pieces(piece_type, chess.BLACK)) * weight
+
+        return min(phase, cls.MAX_PHASE)
+
+    @classmethod
+    def _piece_square_score(
+        cls,
         piece_type: chess.PieceType,
         square: chess.Square,
         color: chess.Color,
+        phase: int,
     ) -> int:
-        score = 0
+        oriented_square = (
+            square if color == chess.WHITE else chess.square_mirror(square)
+        )
+        file = chess.square_file(oriented_square)
+        rank = chess.square_rank(oriented_square)
+        center = cls._center_score(file, rank)
 
-        file = chess.square_file(square)
-        rank = chess.square_rank(square)
-
-        if piece_type in self.CENTER_BONUS:
-            distance = (
-                min(abs(file - 3), abs(file - 4))
-                + min(abs(rank - 3), abs(rank - 4))
-            )
-
-            centrality = 6 - distance
-
-            score += (
-                centrality * self.CENTER_BONUS[piece_type]
-            )
+        middle_game = 0
+        end_game = 0
 
         if piece_type == chess.PAWN:
-            advancement = (
-                rank - 1
-                if color == chess.WHITE
-                else 6 - rank
+            middle_game = rank * 5 + center * 2
+            end_game = rank * 9 + center * 2
+        elif piece_type == chess.KNIGHT:
+            middle_game = center * 10
+            end_game = center * 8
+        elif piece_type == chess.BISHOP:
+            middle_game = center * 5 + rank * 2
+            end_game = center * 6 + rank * 2
+        elif piece_type == chess.ROOK:
+            middle_game = rank * 3 + (4 if rank == 6 else 0)
+            end_game = rank * 4 + center
+        elif piece_type == chess.KING:
+            middle_game = -center * 7
+            end_game = center * 9
+
+        return cls._blend(middle_game, end_game, phase)
+
+    @staticmethod
+    def _center_score(file: int, rank: int) -> int:
+        distance = (
+            min(abs(file - 3), abs(file - 4))
+            + min(abs(rank - 3), abs(rank - 4))
+        )
+        return 6 - distance
+
+    @classmethod
+    def _blend(cls, middle_game: int, end_game: int, phase: int) -> int:
+        return (
+            middle_game * phase
+            + end_game * (cls.MAX_PHASE - phase)
+        ) // cls.MAX_PHASE
+
+    @classmethod
+    def _pawn_structure(
+        cls,
+        board: chess.Board,
+        color: chess.Color,
+    ) -> int:
+        pawns = list(board.pieces(chess.PAWN, color))
+        enemy_pawns = list(board.pieces(chess.PAWN, not color))
+        pawns_by_file = [0] * 8
+
+        for square in pawns:
+            pawns_by_file[chess.square_file(square)] += 1
+
+        score = 0
+
+        for file, count in enumerate(pawns_by_file):
+            if count > 1:
+                score -= (count - 1) * cls.DOUBLED_PAWN_PENALTY
+
+            if count == 0:
+                continue
+
+            has_neighbor = (
+                file > 0 and pawns_by_file[file - 1] > 0
+            ) or (
+                file < 7 and pawns_by_file[file + 1] > 0
             )
 
-            score += max(0, advancement) * self.PAWN_ADVANCE_BONUS
+            if not has_neighbor:
+                score -= count * cls.ISOLATED_PAWN_PENALTY
+
+        enemy_files_and_ranks = [
+            (chess.square_file(square), chess.square_rank(square))
+            for square in enemy_pawns
+        ]
+
+        for square in pawns:
+            file = chess.square_file(square)
+            rank = chess.square_rank(square)
+            relative_rank = rank if color == chess.WHITE else 7 - rank
+
+            has_enemy_ahead = any(
+                abs(enemy_file - file) <= 1
+                and (
+                    enemy_rank > rank
+                    if color == chess.WHITE
+                    else enemy_rank < rank
+                )
+                for enemy_file, enemy_rank in enemy_files_and_ranks
+            )
+
+            if not has_enemy_ahead:
+                score += cls.PASSED_PAWN_BONUS[relative_rank]
+
+        return score
+
+    @classmethod
+    def _king_safety(
+        cls,
+        board: chess.Board,
+        color: chess.Color,
+        phase: int,
+    ) -> int:
+        king = board.king(color)
+
+        if king is None or phase == 0:
+            return 0
+
+        king_file = chess.square_file(king)
+        king_rank = chess.square_rank(king)
+        direction = 1 if color == chess.WHITE else -1
+        shield_rank = king_rank + direction
+        shield = 0
+
+        if 0 <= shield_rank < 8:
+            for file in range(max(0, king_file - 1), min(7, king_file + 1) + 1):
+                pawn = board.piece_at(chess.square(file, shield_rank))
+                if pawn == chess.Piece(chess.PAWN, color):
+                    shield += 1
+
+        enemy = not color
+        pressure = min(4, len(board.attackers(enemy, king)) * 2)
+
+        for file in range(max(0, king_file - 1), min(7, king_file + 1) + 1):
+            for rank in range(max(0, king_rank - 1), min(7, king_rank + 1) + 1):
+                if file == king_file and rank == king_rank:
+                    continue
+
+                attackers = board.attackers(enemy, chess.square(file, rank))
+                if attackers:
+                    pressure += min(2, len(attackers))
+
+        raw_score = shield * 12 - min(pressure, 8) * 7
+        return raw_score * phase // cls.MAX_PHASE
+
+    @classmethod
+    def _mobility(
+        cls,
+        board: chess.Board,
+        color: chess.Color,
+    ) -> int:
+        own_pieces = board.occupied_co[color]
+        score = 0
+
+        for piece_type, weight in cls.MOBILITY_WEIGHTS.items():
+            for square in board.pieces(piece_type, color):
+                destinations = board.attacks_mask(square) & ~own_pieces
+                mobility = min(
+                    destinations.bit_count(),
+                    cls.MAX_MOBILITY,
+                )
+                score += mobility * weight
 
         return score
