@@ -6,7 +6,7 @@ O projeto tem como objetivo construir um motor capaz de analisar posições, pes
 
 A implementação utiliza **Negamax com poda Alfa-Beta, aprofundamento iterativo, busca de quiescência, tabela de transposição e ordenação avançada de movimentos**.
 
-> **Estado atual:** motor funcional, com a etapa de otimização da busca concluída, 82 testes automatizados aprovados, benchmarks registrados e partidas completas de self-play. A preparação competitiva ainda está em desenvolvimento.
+> **Estado atual:** etapas 1 e 2 concluídas. A Etapa 3 está implementada e validada por testes e benchmarks reproduzíveis; 91 testes automatizados passam. Os dados atuais ainda não comprovam aumento de força competitiva. A preparação para operar no formato do torneio está em desenvolvimento.
 
 ## 1. Tecnologias utilizadas
 
@@ -144,7 +144,7 @@ As regras do xadrez são tratadas pelo `python-chess`, enquanto a escolha dos mo
 
 O contrato `PositionEvaluator` define a interface para avaliação de posições.
 
-A implementação `HeuristicEvaluator` considera o material e alguns critérios posicionais, incluindo centralização de cavalos e bispos e avanço de peões.
+A implementação `HeuristicEvaluator` considera material, tabelas peça-casa geradas por fórmulas simples e critérios posicionais. As tabelas mudam conforme a fase da partida: o rei é mantido mais protegido no meio-jogo e recebe incentivo para centralizar no final.
 
 | Peça | Valor em centipeões |
 |---|---:|
@@ -157,7 +157,14 @@ A implementação `HeuristicEvaluator` considera o material e alguns critérios 
 
 A pontuação é positiva para vantagem das brancas e negativa para vantagem das pretas.
 
-A avaliação ainda não contempla de forma abrangente segurança do rei, mobilidade, estrutura de peões ou planejamento estratégico.
+Também são considerados:
+
+- Segurança do rei por proteção de peões e pressão sobre casas próximas.
+- Estrutura de peões, com penalidades para peões dobrados e isolados e bônus para peões passados.
+- Mobilidade de cavalos, bispos, torres e damas, limitada para evitar pontuações exageradas.
+- Atividade por centralização, avanço de peões e presença de torres na sétima fileira.
+
+Os pesos são heurísticas iniciais, não valores calibrados por partidas em larga escala. A avaliação ainda não modela profundamente finais, peões atrasados, casas fracas ou planos estratégicos.
 
 ### 3.3. Negamax com poda Alfa-Beta
 
@@ -415,7 +422,7 @@ Para executar somente a validação final:
 python -m pytest tests/test_final_validation.py -v
 ```
 
-**Última validação informada: 82 testes aprovados.**
+**Última validação: 91 testes aprovados em 31/10/2026.**
 
 Os testes abrangem:
 
@@ -486,7 +493,39 @@ Os resultados estão registrados em `benchmarks/ordering_benchmark.csv`.
 
 Esses benchmarks demonstram ganhos de eficiência nas posições avaliadas. Não representam, isoladamente, um aumento comprovado de força competitiva.
 
-### 6.3. Self-play
+### 6.3. Comparação da avaliação
+
+O benchmark mede o custo da avaliação e compara o lance escolhido pela versão anterior e pela Etapa 3 em quatro posições. Para reproduzir a execução registrada:
+
+```powershell
+python scripts/benchmark_evaluation.py --depth 3 --time 10 --evaluation-repetitions 300 --repetitions 3 --output benchmarks/evaluation_competition_performance_10s.csv
+```
+
+Nas quatro posições, as duas versões escolheram o mesmo lance e concluíram a profundidade 3. O rendimento abaixo é a mediana de três repetições:
+
+| Posição | Lance | Avaliações/s anterior | Avaliações/s Etapa 3 | Profundidade concluída (anterior / Etapa 3) |
+|---|---|---:|---:|---:|
+| Abertura | Nf3 | 31.859,0 | 10.072,5 | 3 / 3 |
+| Meio-jogo | d4 | 32.872,0 | 12.596,3 | 3 / 3 |
+| Final | f4 | 77.806,9 | 51.584,5 | 3 / 3 |
+| Peão passado | e7 | 95.721,3 | 70.928,7 | 3 / 3 |
+
+O throughput da avaliação da Etapa 3 foi menor nas quatro posições: aproximadamente 68% na abertura, 62% no meio-jogo, 34% no final e 26% na posição com peão passado. Com 10 segundos disponíveis, as duas versões concluíram profundidade 3 no meio-jogo; nessa posição, a busca levou medianas de 4,25 s e 4,87 s, respectivamente. As escolhas iguais nesta amostra não provam força equivalente. Os tempos, nós, pontuações e resultados completos ficam em `benchmarks/evaluation_competition_performance_10s.csv`.
+
+### 6.4. Partidas pareadas e ablações da avaliação
+
+As partidas usam o mesmo motor de busca e limite de tempo para as duas versões, alternam as cores em cada par e atribuem a diferença à avaliação. Para reproduzir os confrontos:
+
+```powershell
+python scripts/benchmark_evaluation_matches.py --opponents baseline --pairs 2 --depth 3 --time 3 --max-plies 60 --csv-output benchmarks/evaluation_competition_baseline.csv --pgn-output benchmarks/evaluation_competition_baseline.pgn
+python scripts/benchmark_evaluation_matches.py --opponents no_mobility no_pawn_structure no_king_safety --pairs 1 --depth 3 --time 3 --max-plies 60 --csv-output benchmarks/evaluation_competition_ablations.csv --pgn-output benchmarks/evaluation_competition_ablations.pgn
+```
+
+O avaliador completo enfrentou a avaliação anterior em duas aberturas, com as cores invertidas: uma vitória e três partidas que chegaram ao limite de 60 meios-lances. Nas ablações, contra a avaliação completa, a versão sem mobilidade teve uma derrota e uma partida inconclusiva; sem estrutura de peões, duas inconclusivas; sem segurança do rei, duas inconclusivas. Não houve amostra suficiente para estimar força, declarar superioridade ou recalibrar os pesos. Os CSVs contêm profundidade, nós, tempo, cor e motivo de término; os PGNs guardam as partidas. Partidas inconclusivas não contam como empate.
+
+O `--time 3` é um limite fixo por busca usado para comparação controlada, não uma reprodução do relógio oficial. O limite de 60 meios-lances reduz a duração do experimento e também causa partidas inconclusivas; os dados devem ser usados como diagnóstico, não como rating competitivo.
+
+### 6.5. Self-play
 
 Uma execução recente utilizou:
 
@@ -512,13 +551,13 @@ O PGN está disponível em `benchmarks/self_play.pgn`.
 
 Apesar das melhorias, o motor ainda possui limitações relevantes:
 
-1. **Avaliação estratégica simplificada:** faltam critérios mais completos de mobilidade, segurança do rei, estrutura de peões e fase da partida.
+1. **Avaliação estratégica ainda simples:** os novos critérios são heurísticas iniciais e precisam ser calibrados em posições e partidas diversas.
 2. **Profundidade limitada:** posições complexas podem consumir todo o tempo disponível antes de atingir a profundidade máxima.
 3. **Busca em Python:** o custo computacional limita a quantidade de posições pesquisadas por segundo.
-4. **Controle de tempo por movimento:** ainda não existe gerenciamento completo do relógio de uma partida oficial.
+4. **Controle de tempo da partida:** ainda não existe gerenciamento completo do relógio oficial de 25 minutos por jogador. O benchmark atual impõe um limite fixo a cada busca.
 5. **Interface competitiva pendente:** a interface visual atual serve ao self-play, não à entrada e execução de lances em partidas oficiais.
 6. **Sem avaliação neural:** nenhum modelo de aprendizado de máquina participa atualmente das decisões.
-7. **Força competitiva não medida:** ainda faltam partidas comparativas contra motores de referência e conjuntos padronizados de posições táticas.
+7. **Força competitiva sem medição robusta:** os confrontos internos desta etapa tiveram poucas partidas decisivas. Ainda faltam partidas contra motores de referência e conjuntos padronizados de posições táticas.
 8. **Quiescência e desempenho:** ainda existem oportunidades de otimização em posições táticas complexas.
 
 ## 8. Roadmap de desenvolvimento
@@ -552,13 +591,13 @@ Apesar das melhorias, o motor ainda possui limitações relevantes:
 
 ### Etapa 3 — Evolução da avaliação
 
-- [ ] Tabelas peça-casa mais completas.
-- [ ] Segurança do rei.
-- [ ] Estrutura de peões.
-- [ ] Mobilidade e atividade das peças.
-- [ ] Avaliação adaptativa por fase da partida.
-- [ ] Testes posicionais e táticos.
-- [ ] Comparação de desempenho entre versões do avaliador.
+- [x] Tabelas peça-casa por tipo de peça e fase da partida.
+- [x] Segurança do rei por abrigo de peões e pressão nas casas vizinhas.
+- [x] Estrutura de peões dobrados, isolados e passados.
+- [x] Mobilidade e atividade das peças.
+- [x] Avaliação adaptativa por fase da partida.
+- [x] Testes posicionais, táticos e de simetria.
+- [x] Comparação reproduzível entre a avaliação anterior e a atual.
 
 ### Etapa 4 — Preparação competitiva
 
@@ -593,10 +632,11 @@ Entre os requisitos relevantes estão:
 - Ausência de dependência de serviços online durante o jogo.
 - Escolha autônoma dos movimentos.
 - Registro dos movimentos realizados pelo adversário.
-- Respeito ao tempo disponível.
+- Cada jogador dispõe de 25 minutos para a partida; os jogadores operam o relógio e movem as peças no tabuleiro físico.
+- O edital prevê envio do software por Git até 04/11/2026 e realização do evento em 06/11/2026.
 - Entrega e validação do código-fonte conforme o regulamento.
 
-A arquitetura foi projetada para execução local, mas a conformidade completa com o regulamento ainda precisa ser validada.
+O regulamento oficial está publicado em [Edital Chess Challenge III — iCEV 2026](https://www.somosicev.com/wp-content/uploads/2026/09/Chess-Challenge-III-1.pdf). Como o torneio não define segundos por lance, o benchmark de avaliação usa um limite fixo por busca apenas para manter as versões sob o mesmo orçamento. A conformidade operacional completa ainda precisa ser validada na Etapa 4.
 
 ## 10. Autoria e referências técnicas
 
@@ -614,15 +654,6 @@ A utilização de bibliotecas e eventuais modelos externos deverá respeitar sua
 
 ## 11. Próximo objetivo
 
-A próxima etapa concentra-se na **qualidade da avaliação das posições**.
+A Etapa 3 está concluída como implementação e validação inicial. Os benchmarks não demonstraram evidência suficiente para alterar os pesos nem provar ganho competitivo; uma calibração mais ampla pode ser feita se surgirem mais posições e jogos de referência. O próximo trabalho é avançar para a **Etapa 4 — Preparação competitiva**: implementar a interface de operação, integrar o registro de lances adversários, gerenciar o relógio da partida e medir a força contra referências.
 
-Após otimizar a busca, o objetivo é melhorar a capacidade do motor de identificar vantagens estratégicas, antecipar ameaças e selecionar movimentos mais fortes.
-
-As prioridades são:
-
-1. Avaliação posicional.
-2. Segurança do rei e estrutura de peões.
-3. Mobilidade e atividade das peças.
-4. Testes táticos e comparações entre versões.
-
-**Meta:** desenvolver um motor de xadrez funcional, autoral, executável offline e progressivamente mais competitivo, mantendo baixo consumo de recursos computacionais.
+**Meta:** entregar um motor autoral, estável, executável offline e preparado para a operação real do campeonato.

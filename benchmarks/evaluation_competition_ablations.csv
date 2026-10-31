@@ -1,0 +1,7 @@
+opponent,pair_id,opening,full_color,full_result,game_result,termination,plies_after_opening,full_elapsed_seconds,opponent_elapsed_seconds,full_average_depth,opponent_average_depth,full_nodes,opponent_nodes,statuses
+sem_mobilidade,1,Italiana,white,win,1-0,CHECKMATE,15,17.947,19.267,2.38,2.0,41941,38026,completed/fallback/timeout
+sem_mobilidade,1,Italiana,black,unfinished,*,move_limit,60,76.556,76.328,2.4,2.4,166007,154827,completed/timeout
+sem_estrutura_de_peoes,1,Italiana,white,unfinished,*,move_limit,60,66.583,64.668,2.33,2.4,137935,142811,completed/timeout
+sem_estrutura_de_peoes,1,Italiana,black,unfinished,*,move_limit,60,47.559,50.575,2.73,2.7,105412,110836,completed/timeout
+sem_seguranca_do_rei,1,Italiana,white,unfinished,*,move_limit,60,51.624,44.996,2.6,2.63,112019,105305,completed/forced/timeout
+sem_seguranca_do_rei,1,Italiana,black,unfinished,*,move_limit,60,75.405,70.594,2.43,2.47,152078,153952,completed/timeout
