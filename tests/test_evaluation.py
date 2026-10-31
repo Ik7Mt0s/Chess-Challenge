@@ -106,6 +106,6 @@ def test_positional_evaluation_is_symmetric():
     board.push_san("e4")
     board.push_san("e5")
     board.push_san("Nf3")
-    board.push_san("Nc6")
+    board.push_san("Nf6")
 
     assert evaluator.evaluate(board) == 0
