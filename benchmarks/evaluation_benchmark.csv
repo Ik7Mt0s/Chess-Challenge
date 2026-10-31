@@ -1,0 +1,9 @@
+position,evaluator,static_score_cp_white,move_uci,search_score_cp_side_to_move,depth,status,elapsed_seconds,total_nodes,quiescence_nodes
+Abertura,baseline,0,g1f3,0,2,completed,0.0376,140,60
+Abertura,passo_3,0,g1f3,0,2,completed,0.0482,140,60
+Meio-jogo,baseline,350,d2d4,355,2,completed,0.9231,2215,2009
+Meio-jogo,passo_3,395,d2d4,399,2,completed,1.5772,2600,2396
+Final,baseline,0,f2f4,0,2,completed,0.0183,74,33
+Final,passo_3,0,f2f4,0,2,completed,0.0204,75,33
+Peão passado,baseline,120,e6e7,900,2,completed,0.0242,91,57
+Peão passado,passo_3,170,e6e7,898,2,completed,0.0307,99,65
