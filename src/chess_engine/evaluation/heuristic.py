@@ -88,8 +88,43 @@ def _make_passed_pawn_masks() -> dict[bool, tuple[int, ...]]:
     return {color: tuple(mask) for color, mask in masks.items()}
 
 
+def _make_king_masks() -> tuple[tuple[tuple[int, ...], ...], dict[bool, tuple[int, ...]]]:
+    zones = []
+    shields = {chess.WHITE: [], chess.BLACK: []}
+
+    for square in chess.SQUARES:
+        file = chess.square_file(square)
+        rank = chess.square_rank(square)
+        zone = []
+
+        for target_file in range(max(0, file - 1), min(7, file + 1) + 1):
+            for target_rank in range(max(0, rank - 1), min(7, rank + 1) + 1):
+                if (target_file, target_rank) != (file, rank):
+                    zone.append(chess.square(target_file, target_rank))
+
+        zones.append(tuple(zone))
+
+        for color in (chess.WHITE, chess.BLACK):
+            shield_rank = rank + (1 if color == chess.WHITE else -1)
+            mask = 0
+            if 0 <= shield_rank < 8:
+                for target_file in range(
+                    max(0, file - 1),
+                    min(7, file + 1) + 1,
+                ):
+                    mask |= chess.BB_SQUARES[
+                        chess.square(target_file, shield_rank)
+                    ]
+            shields[color].append(mask)
+
+    return tuple(zones), {
+        color: tuple(masks) for color, masks in shields.items()
+    }
+
+
 PIECE_SQUARE_TABLES = _make_piece_square_tables()
 PASSED_PAWN_MASKS = _make_passed_pawn_masks()
+KING_ZONE_SQUARES, KING_SHIELD_MASKS = _make_king_masks()
 
 
 class HeuristicEvaluator(PositionEvaluator):
@@ -132,22 +167,9 @@ class HeuristicEvaluator(PositionEvaluator):
         black_score = 0
 
         for color in (chess.WHITE, chess.BLACK):
-            side_score = 0
-
-            for piece_type, material in self.PIECE_VALUES.items():
-                pieces = board.pieces_mask(piece_type, color)
-                for square in chess.scan_forward(pieces):
-                    side_score += material
-                    side_score += self._piece_square_score(
-                        piece_type,
-                        square,
-                        color,
-                        phase,
-                    )
-
+            side_score = self._piece_activity_score(board, color, phase)
             side_score += self._pawn_structure(board, color)
             side_score += self._king_safety(board, color, phase)
-            side_score += self._mobility(board, color)
 
             if color == chess.WHITE:
                 white_score = side_score
@@ -155,6 +177,37 @@ class HeuristicEvaluator(PositionEvaluator):
                 black_score = side_score
 
         return white_score - black_score
+
+    def _piece_activity_score(
+        self,
+        board: chess.Board,
+        color: chess.Color,
+        phase: int,
+    ) -> int:
+        own_pieces = board.occupied_co[color]
+        score = 0
+
+        for piece_type, material in self.PIECE_VALUES.items():
+            pieces = board.pieces_mask(piece_type, color)
+            weight = self.MOBILITY_WEIGHTS.get(piece_type, 0)
+
+            for square in chess.scan_forward(pieces):
+                score += material
+                score += self._piece_square_score(
+                    piece_type,
+                    square,
+                    color,
+                    phase,
+                )
+
+                if weight:
+                    destinations = board.attacks_mask(square) & ~own_pieces
+                    score += min(
+                        destinations.bit_count(),
+                        self.MAX_MOBILITY,
+                    ) * weight
+
+        return score
 
     @classmethod
     def _game_phase(cls, board: chess.Board) -> int:
@@ -240,17 +293,10 @@ class HeuristicEvaluator(PositionEvaluator):
         if king is None or phase == 0:
             return 0
 
-        king_file = chess.square_file(king)
-        king_rank = chess.square_rank(king)
-        direction = 1 if color == chess.WHITE else -1
-        shield_rank = king_rank + direction
-        shield = 0
-
-        if 0 <= shield_rank < 8:
-            for file in range(max(0, king_file - 1), min(7, king_file + 1) + 1):
-                pawn = board.piece_at(chess.square(file, shield_rank))
-                if pawn == chess.Piece(chess.PAWN, color):
-                    shield += 1
+        shield = (
+            board.pieces_mask(chess.PAWN, color)
+            & KING_SHIELD_MASKS[color][king]
+        ).bit_count()
 
         enemy = not color
         pressure = min(
@@ -258,17 +304,10 @@ class HeuristicEvaluator(PositionEvaluator):
             board.attackers_mask(enemy, king).bit_count() * 2,
         )
 
-        for file in range(max(0, king_file - 1), min(7, king_file + 1) + 1):
-            for rank in range(max(0, king_rank - 1), min(7, king_rank + 1) + 1):
-                if file == king_file and rank == king_rank:
-                    continue
-
-                attackers = board.attackers_mask(
-                    enemy,
-                    chess.square(file, rank),
-                ).bit_count()
-                if attackers:
-                    pressure += min(2, attackers)
+        for square in KING_ZONE_SQUARES[king]:
+            attackers = board.attackers_mask(enemy, square).bit_count()
+            if attackers:
+                pressure += min(2, attackers)
 
         raw_score = shield * 12 - min(pressure, 8) * 7
         return raw_score * phase // cls.MAX_PHASE
