@@ -1,6 +1,9 @@
 import chess
 
-from chess_engine.evaluation.heuristic import HeuristicEvaluator
+from chess_engine.evaluation.heuristic import (
+    HeuristicEvaluator,
+    PIECE_SQUARE_TABLES,
+)
 
 
 def bare_board() -> chess.Board:
@@ -127,3 +130,48 @@ def test_phase_decreases_as_major_and_minor_pieces_are_removed():
 
     assert opening_phase == evaluator.MAX_PHASE
     assert evaluator._game_phase(board) < opening_phase
+
+
+def test_precomputed_tables_match_the_formula_for_every_square_and_phase():
+    piece_types = (
+        chess.PAWN,
+        chess.KNIGHT,
+        chess.BISHOP,
+        chess.ROOK,
+        chess.QUEEN,
+        chess.KING,
+    )
+
+    for piece_type in piece_types:
+        for phase in range(25):
+            for square in chess.SQUARES:
+                file = chess.square_file(square)
+                rank = chess.square_rank(square)
+                center = 6 - (
+                    min(abs(file - 3), abs(file - 4))
+                    + min(abs(rank - 3), abs(rank - 4))
+                )
+                middle_game = 0
+                end_game = 0
+
+                if piece_type == chess.PAWN:
+                    middle_game = rank * 5 + center * 2
+                    end_game = rank * 9 + center * 2
+                elif piece_type == chess.KNIGHT:
+                    middle_game = center * 10
+                    end_game = center * 8
+                elif piece_type == chess.BISHOP:
+                    middle_game = center * 5 + rank * 2
+                    end_game = center * 6 + rank * 2
+                elif piece_type == chess.ROOK:
+                    middle_game = rank * 3 + (4 if rank == 6 else 0)
+                    end_game = rank * 4 + center
+                elif piece_type == chess.KING:
+                    middle_game = -center * 7
+                    end_game = center * 9
+
+                expected = (
+                    middle_game * phase + end_game * (24 - phase)
+                ) // 24
+
+                assert PIECE_SQUARE_TABLES[piece_type][phase][square] == expected
