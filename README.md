@@ -1,3 +1,4 @@
+
 # Chess Challenge III — Motor de Xadrez
 
 Motor de xadrez desenvolvido em Python para participação no **Chess Challenge III — ICEV 2026**.
@@ -6,192 +7,122 @@ O projeto tem como objetivo construir um motor capaz de analisar posições, pes
 
 A implementação utiliza **Negamax com poda Alfa-Beta, aprofundamento iterativo, busca de quiescência, tabela de transposição e ordenação avançada de movimentos**.
 
-> **Estado atual:** etapas 1 e 2 concluídas. A Etapa 3 está implementada e validada por testes e benchmarks reproduzíveis; 91 testes automatizados passam. Os dados atuais ainda não comprovam aumento de força competitiva. A preparação para operar no formato do torneio está em desenvolvimento.
+> **Estado atual:** as etapas de fundação, otimização da busca e evolução da avaliação estão implementadas. O projeto também possui integração local com Stockfish 19, testes automatizados, benchmarks e ferramentas de análise de desempenho. A preparação para o formato oficial do torneio continua em desenvolvimento.
 
 ## 1. Tecnologias utilizadas
 
 | Tecnologia | Finalidade |
 |---|---|
-| Python 3.14 | Ambiente utilizado no desenvolvimento |
-| python-chess | Representação do tabuleiro, regras e movimentos legais |
+| Python 3.14 | Linguagem e ambiente de desenvolvimento |
+| python-chess | Tabuleiro, movimentos legais e regras do xadrez |
 | pytest | Testes automatizados |
-| Tkinter | Interfaces visuais de self-play e ChessEngine vs Stockfish |
-| Stockfish 19 (opcional) | Motor adversário externo para partidas locais de avaliação |
-| setuptools | Empacotamento e instalação |
+| Tkinter | Interfaces gráficas de partidas |
+| Stockfish 19 | Motor adversário para testes competitivos |
+| setuptools | Instalação e empacotamento |
 | Git e GitHub | Versionamento e colaboração |
 
-O projeto não exige GPU dedicada, banco de dados, Docker, modelos neurais ou conexão com APIs externas.
+O projeto não exige GPU dedicada, banco de dados, Docker, modelos neurais ou APIs externas.
 
-O Tkinter normalmente acompanha as instalações convencionais do Python no Windows.
+O Stockfish é utilizado exclusivamente como adversário externo nos experimentos. O motor desenvolvido neste projeto continua responsável por todas as suas próprias decisões.
 
 ## 2. Arquitetura
 
 O motor foi organizado em componentes independentes:
+
 ```text
-Interface CLI / Self-play / Partidas contra Stockfish
-
-          |
-
-          v
-
-     ChessEngine
-
-          |
-
-          +---- TimeManager
-
-          |
-
-          +---- Iterative Deepening
-
-          |
-
-          v
-
-   Negamax + Alfa-Beta
-
-          |
-
-          +---- Ordenação de movimentos
-
-          |       |
-
-          |       +---- Capturas e promoções
-
-          |       +---- Killer Moves
-
-          |       +---- History Heuristic
-
-          |
-
-          +---- Tabela de transposição
-
-          |       |
-
-          |       +---- Hash Zobrist
-
-          |
-
-          +---- Busca de quiescência
-
-          |
-
-          v
-
-   HeuristicEvaluator
-
-          |
-
-          v
-
-    Melhor movimento
+Interface CLI / Self-play / Stockfish
+                |
+                v
+           ChessEngine
+                |
+       +--------+--------+
+       |                 |
+       v                 v
+  TimeManager     Iterative Deepening
+                         |
+                         v
+                  Negamax + Alfa-Beta
+                         |
+              +----------+----------+
+              |          |          |
+              v          v          v
+         Ordenação   Transposition  Quiescence
+         de lances      Table        Search
+              |          |
+              v          v
+         Killer Moves  Zobrist Hash
+         History
+         Heuristic
+              |
+              v
+       HeuristicEvaluator
+              |
+              v
+         Melhor lance
 ```
-O `ChessEngine` coordena a busca, enquanto os módulos especializados implementam a avaliação, a ordenação, o cache e o controle de tempo.
 
-A separação entre avaliação e busca permite aprimorar a função heurística ou integrar novos avaliadores sem reescrever o algoritmo principal.
+O `ChessEngine` coordena a pesquisa, enquanto os módulos especializados implementam avaliação, ordenação, cache e controle de tempo.
+
+A separação entre avaliação e busca permite aprimorar cada componente independentemente.
 
 ### Estrutura do projeto
+
 ```text
 Chess Challenge/
-
 ├── benchmarks/
-
-│   ├── ordering_benchmark.csv
-
-│   ├── search_benchmark.csv
-
-│   └── self_play.pgn
-
+│   ├── draw_rules_validation/
+│   ├── move_ordering_v2/
+│   ├── profiling/
+│   ├── search_ordering_v2/
+│   ├── stockfish_matches/
+│   │   ├── original/
+│   │   └── optimized/
+│   ├── evaluation_benchmark.csv
+│   ├── ordering_benchmark.csv
+│   ├── search_benchmark.csv
+│   └── self_play.pgn
 ├── docs/
-
+├── engines/
+│   └── stockfish/
+│       └── stockfish-windows-x86-64-universal.exe
 ├── scripts/
-
-│   ├── benchmark_ordering.py
-
-│   ├── benchmark_search.py
-
-│   ├── self_play.py
-
-│   └── self_play_visual.py
-
+│   ├── benchmark_evaluation.py
+│   ├── benchmark_evaluation_matches.py
+│   ├── benchmark_move_ordering_v2.py
+│   ├── benchmark_ordering.py
+│   ├── benchmark_search.py
+│   ├── benchmark_search_ordering_v2.py
+│   ├── profile_engine.py
+│   ├── self_play.py
+│   ├── self_play_visual.py
+│   ├── stockfish_match_visual.py
+│   └── validate_draw_rules.py
 ├── src/
-
-│   └── chess_engine/
-
-│       ├── evaluation/
-
-│       │   ├── __init__.py
-
-│       │   ├── base.py
-
-│       │   └── heuristic.py
-
-│       ├── models/
-
-│       │   ├── __init__.py
-
-│       │   └── loader.py
-
-│       ├── search/
-
-│       │   ├── __init__.py
-
-│       │   ├── metrics.py
-
-│       │   ├── move_ordering.py
-
-│       │   ├── negamax.py
-
-│       │   ├── quiescence.py
-
-│       │   └── transposition.py
-
-│       ├── utils/
-
-│       │   ├── __init__.py
-
-│       │   └── time_manager.py
-
-│       ├── __init__.py
-
-│       ├── board.py
-
-│       └── engine.py
-
+│   └── chess_engine/
+│       ├── evaluation/
+│       │   ├── base.py
+│       │   └── heuristic.py
+│       ├── models/
+│       │   └── loader.py
+│       ├── search/
+│       │   ├── draw_rules.py
+│       │   ├── metrics.py
+│       │   ├── move_ordering.py
+│       │   ├── negamax.py
+│       │   ├── quiescence.py
+│       │   └── transposition.py
+│       ├── utils/
+│       │   └── time_manager.py
+│       ├── board.py
+│       └── engine.py
 ├── tests/
-
-│   ├── __init__.py
-
-│   ├── test_board.py
-
-│   ├── test_engine.py
-
-│   ├── test_evaluation.py
-
-│   ├── test_final_validation.py
-
-│   ├── test_metrics.py
-
-│   ├── test_move_ordering_advanced.py
-
-│   ├── test_search.py
-
-│   ├── test_self_play.py
-
-│   ├── test_transposition.py
-
-│   └── test_transposition_key.py
-
 ├── main.py
-
 ├── pyproject.toml
-
 ├── requirements.txt
-
 ├── .gitignore
-
 └── README.md
 ```
+
 ## 3. Funcionalidades implementadas
 
 ### 3.1. Gerenciamento do tabuleiro
@@ -201,17 +132,11 @@ Chess Challenge/
 A classe `ChessBoard` encapsula operações do `python-chess`:
 
 - Inicialização de partidas e posições FEN.
-
 - Listagem de movimentos legais.
-
 - Execução de movimentos SAN e UCI.
-
 - Desfazer movimentos.
-
 - Reinicialização do tabuleiro.
-
 - Identificação de xeque-mate e empates.
-
 - Consulta do resultado da partida.
 
 As regras do xadrez são tratadas pelo `python-chess`, enquanto a escolha dos movimentos é responsabilidade do motor desenvolvido neste projeto.
@@ -219,14 +144,12 @@ As regras do xadrez são tratadas pelo `python-chess`, enquanto a escolha dos mo
 ### 3.2. Avaliação heurística
 
 **Arquivos:**
-
 - `src/chess_engine/evaluation/base.py`
-
 - `src/chess_engine/evaluation/heuristic.py`
 
-O contrato `PositionEvaluator` define a interface para avaliação de posições.
+O contrato `PositionEvaluator` define a interface de avaliação de posições.
 
-A implementação `HeuristicEvaluator` considera material, tabelas peça-casa geradas por fórmulas simples e critérios posicionais. As tabelas mudam conforme a fase da partida: o rei é mantido mais protegido no meio-jogo e recebe incentivo para centralizar no final.
+A implementação `HeuristicEvaluator` considera material, tabelas peça-casa e critérios posicionais, adaptados à fase da partida.
 
 | Peça | Valor em centipeões |
 |---|---:|
@@ -237,19 +160,17 @@ A implementação `HeuristicEvaluator` considera material, tabelas peça-casa ge
 | Dama | 900 |
 | Rei | 0 |
 
-A pontuação é positiva para vantagem das brancas e negativa para vantagem das pretas.
-
 Também são considerados:
 
-- Segurança do rei por proteção de peões e pressão sobre casas próximas.
+- Segurança do rei.
+- Estrutura de peões.
+- Peões dobrados, isolados e passados.
+- Mobilidade das peças.
+- Centralização.
+- Atividade das torres.
+- Fase da partida.
 
-- Estrutura de peões, com penalidades para peões dobrados e isolados e bônus para peões passados.
-
-- Mobilidade de cavalos, bispos, torres e damas, limitada para evitar pontuações exageradas.
-
-- Atividade por centralização, avanço de peões e presença de torres na sétima fileira.
-
-Os pesos são heurísticas iniciais, não valores calibrados por partidas em larga escala. A avaliação ainda não modela profundamente finais, peões atrasados, casas fracas ou planos estratégicos.
+Os pesos são heurísticas iniciais e ainda não foram calibrados por experimentos competitivos em larga escala.
 
 ### 3.3. Negamax com poda Alfa-Beta
 
@@ -257,31 +178,24 @@ Os pesos são heurísticas iniciais, não valores calibrados por partidas em lar
 
 O Negamax pesquisa continuações possíveis, alternando a perspectiva entre os jogadores.
 
-A poda Alfa-Beta evita explorar ramos que não podem melhorar o resultado da busca.
+A poda Alfa-Beta evita explorar ramos que não podem melhorar o resultado da pesquisa.
 
 A implementação inclui:
 
 - Busca recursiva por profundidade.
-
 - Poda Alfa-Beta.
-
 - Reconhecimento de posições terminais.
-
 - Integração com quiescência.
-
 - Consulta e armazenamento na tabela de transposição.
-
 - Ordenação avançada de movimentos.
-
 - Verificação do limite de tempo.
-
 - Restauração do tabuleiro após cada exploração.
 
 ### 3.4. Busca de quiescência
 
 **Arquivo:** `src/chess_engine/search/quiescence.py`
 
-A quiescência reduz o efeito horizonte, evitando encerrar imediatamente a avaliação em determinadas posições taticamente instáveis.
+A busca de quiescência reduz o efeito horizonte, evitando encerrar imediatamente a avaliação em determinadas posições taticamente instáveis.
 
 A implementação considera principalmente capturas e promoções. Quando o jogador está em xeque, analisa as respostas legais necessárias.
 
@@ -298,11 +212,8 @@ A identificação utiliza hash Zobrist e informações adicionais relacionadas a
 Cada entrada registra:
 
 - Profundidade pesquisada.
-
 - Avaliação.
-
 - Tipo de limite (`EXACT`, `LOWER` ou `UPPER`).
-
 - Melhor movimento encontrado.
 
 A tabela possui capacidade limitada, configurada por padrão para 20.000 entradas.
@@ -318,39 +229,37 @@ A ordenação prioriza movimentos potencialmente relevantes antes da busca.
 Os critérios incluem:
 
 - Melhor movimento da tabela de transposição.
-
 - Capturas, considerando atacante e vítima.
-
 - Promoções.
-
 - Xeques.
-
 - Killer Moves.
-
 - History Heuristic.
 
 A ordenação não elimina movimentos legais. Seu objetivo é aumentar a eficiência da poda Alfa-Beta.
+
+A implementação também permite comparar duas estratégias de pontuação:
+
+- **Original:** considera a pontuação de xeques em movimentos tranquilos.
+- **Otimizada:** evita esse cálculo antecipado para reduzir o custo da ordenação.
+
+A configuração `score_quiet_checks` permite alternar entre as estratégias nos experimentos.
 
 ### 3.7. Aprofundamento iterativo
 
 **Arquivo:** `src/chess_engine/engine.py`
 
-O `ChessEngine` pesquisa profundidades progressivas:
+O motor pesquisa profundidades progressivas:
+
 ```text
 Profundidade 1
-
-      |
-
+      |
 Profundidade 2
-
-      |
-
+      |
 Profundidade 3
-
-      |
-
-     ...
+      |
+     ...
 ```
+
 O melhor resultado de uma iteração concluída é preservado.
 
 Caso o limite de tempo seja atingido, o motor retorna o resultado da última profundidade concluída ou um movimento legal de reserva.
@@ -384,18 +293,24 @@ O controle atual considera o orçamento de tempo de cada movimento, não o reló
 O motor registra:
 
 - Nós pesquisados pelo Negamax.
-
 - Nós pesquisados pela quiescência.
-
 - Total de nós.
-
 - Cortes Alfa-Beta.
-
-Também são disponibilizadas estatísticas de consultas e acertos da tabela de transposição.
+- Consultas e acertos da tabela de transposição.
 
 Essas informações permitem comparar configurações do motor e acompanhar sua evolução.
 
-### 3.10. Preparação para modelos de IA
+### 3.10. Detecção otimizada de empates
+
+**Arquivo:** `src/chess_engine/search/draw_rules.py`
+
+O projeto possui uma implementação otimizada para verificações de empate durante a busca.
+
+O objetivo é reduzir o custo das verificações repetidas sem alterar o comportamento esperado das regras.
+
+A equivalência entre as implementações pode ser verificada por meio do script `validate_draw_rules.py`.
+
+### 3.11. Preparação para modelos de IA
 
 **Arquivo:** `src/chess_engine/models/loader.py`
 
@@ -410,475 +325,609 @@ A utilização futura de avaliação neural dependerá de testes de desempenho, 
 ### 4.1. Pré-requisitos
 
 - Python 3.11 ou superior.
-
 - Git.
-
 - Terminal PowerShell, Bash ou equivalente.
 
 O desenvolvimento e os testes recentes foram realizados com Python 3.14.
 
 ### 4.2. Clonar o repositório
-```powershell
-git clone https\://github.com/Ik7Mt0s/Chess-Challenge.git
 
+```powershell
+git clone https://github.com/Ik7Mt0s/Chess-Challenge.git
 cd Chess-Challenge
 ```
+
 ### 4.3. Criar o ambiente virtual
 
 No Windows:
+
 ```powershell
 py -3.14 -m venv .venv
-
-..venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 ```
+
 No Linux ou macOS:
+
 ```bash
 python3 -m venv .venv
-
 source .venv/bin/activate
 ```
+
 ### 4.4. Instalar as dependências
+
 ```powershell
 python -m pip install -e ".[dev]"
 ```
+
 ### 4.5. Validar a instalação
+
 ```powershell
 python -c "import chess_engine; print('Motor configurado com sucesso!')"
 ```
+
 ### 4.6. Jogar contra o motor no terminal
+
 ```powershell
 python main.py
 ```
+
 O jogador controla as peças brancas e o motor responde com as pretas.
 
-São aceitos movimentos em SAN ou UCI, por exemplo:
+São aceitos movimentos SAN ou UCI:
+
 ```text
 e4
-
 Nf3
-
 O-O
-
 e2e4
-
 g1f3
 ```
+
 Comandos disponíveis:
 
 - `sair`: encerra a execução.
-
 - `desfazer`: desfaz um turno completo, quando disponível.
 
 ### 4.7. Self-play automatizado
+
 ```powershell
-python scripts/self_play.py --depth 3 --time 1 --max-plies 1000
+python scripts/self_play.py --depth 3 --time 1 --max-plies 100
 ```
+
 O script coloca duas instâncias do motor para jogar entre si.
 
-Durante a execução, apresenta:
-
-- Movimento realizado.
-
-- Profundidade concluída.
-
-- Avaliação.
-
-- Tempo utilizado.
+Durante a execução, apresenta movimentos, profundidade, avaliação e tempo utilizado.
 
 Ao final, informa o resultado e salva a partida em formato PGN.
 
 ### 4.8. Self-play visual
+
 ```powershell
 python scripts/self_play_visual.py --depth 3 --time 1
 ```
+
 A interface utiliza Tkinter para apresentar a partida em um tabuleiro gráfico.
 
 Funcionalidades:
 
-- Iniciar e continuar a partida.
-
+- Iniciar e continuar.
 - Pausar.
-
 - Executar um lance por vez.
-
 - Reiniciar.
-
-- Ajustar o intervalo visual entre movimentos.
-
+- Ajustar o intervalo visual.
 - Acompanhar o histórico.
-
 - Consultar profundidade, avaliação e tempo.
-
 - Exportar a partida em PGN.
-
-As buscas são executadas em threads separadas para manter a interface responsiva.
 
 A interface visual é destinada ao acompanhamento de partidas entre bots, não à operação em partidas oficiais do campeonato.
 
-### 4.9. Partidas locais contra o Stockfish 19
+## 5. Integração com Stockfish 19
+
+O projeto permite colocar o `ChessEngine` para enfrentar o **Stockfish 19**, um motor de xadrez externo, por meio de uma interface gráfica desenvolvida com Tkinter.
 
 **Arquivo:** `scripts/stockfish_match_visual.py`
 
-O projeto permite colocar o `ChessEngine` para enfrentar o **Stockfish 19**, um motor de xadrez externo, por meio de uma interface visual em Tkinter. A comunicação é feita pelo protocolo **UCI (Universal Chess Interface)**, usando `chess.engine` do `python-chess`, já incluído nas dependências.
+A comunicação ocorre pelo protocolo **UCI (Universal Chess Interface)**, utilizando `chess.engine` do `python-chess`.
 
-Essa funcionalidade é destinada a **testes e comparação de desempenho**. O Stockfish calcula exclusivamente seus próprios lances; o `ChessEngine` continua utilizando sua implementação independente de Negamax, Alfa-Beta, quiescência e avaliação heurística. **O Stockfish não é uma rede neural integrada ao nosso motor.** As partidas funcionam localmente, sem API ou conexão com a internet após a instalação.
+O Stockfish é executado como adversário independente. Ele não fornece avaliações ou movimentos para o nosso motor durante suas buscas.
 
-#### Instalação do Stockfish no Windows
+### 5.1. Instalação do Stockfish no Windows
 
-1. Baixe o executável adequado ao seu processador em [stockfishchess.org/download](https://stockfishchess.org/download/).
-2. Extraia o arquivo na pasta `engines/stockfish/` do projeto.
-3. Na configuração utilizada durante o desenvolvimento, o executável é `engines/stockfish/stockfish-windows-x86-64-universal.exe`.
-4. Para conferir a instalação, execute no PowerShell, a partir da raiz do projeto:
+1. Acesse [stockfishchess.org/download](https://stockfishchess.org/download/).
+2. Baixe o executável adequado ao processador.
+3. Extraia o conteúdo para `engines/stockfish/`.
+4. Verifique se o executável está no caminho esperado:
+
+```text
+engines/stockfish/stockfish-windows-x86-64-universal.exe
+```
+
+Para testar no PowerShell:
+
 ```powershell
 & ".\engines\stockfish\stockfish-windows-x86-64-universal.exe"
 ```
-No console do Stockfish, digite `uci`. A resposta deve conter `uciok`. Para encerrar, digite `quit`.
 
-> O executável do Stockfish **não é instalado pelo `pip`** e deve ser baixado separadamente. Recomenda-se incluir `/engines/stockfish/` no `.gitignore`, evitando versionar binários externos.
+No console do Stockfish, digite:
 
-#### Iniciar uma partida
-
-Com o ambiente virtual ativado, execute na raiz do repositório:
-```powershell
-python scripts/stockfish_match_visual.py --depth 3 --our-time 1 --stockfish-time 0.1 --elo 1320 --our-color white
+```text
+uci
 ```
-Esse comando coloca nosso motor de **brancas**, com profundidade máxima 3 e até 1 segundo de busca por lance, contra o Stockfish configurado para **1320 Elo** e 0,1 segundo de busca por lance.
 
-Para jogar com as **pretas**:
-```powershell
-python scripts/stockfish_match_visual.py --depth 3 --our-time 1 --stockfish-time 0.1 --elo 1320 --our-color black
+A resposta deve conter:
+
+```text
+uciok
 ```
-Para aumentar a dificuldade do adversário:
-```powershell
-python scripts/stockfish_match_visual.py --depth 3 --our-time 1 --stockfish-time 0.1 --elo 1800 --our-color white
+
+Para encerrar:
+
+```text
+quit
 ```
-#### Parâmetros disponíveis
 
-| Parâmetro | Padrão | Descrição |
-|---|---:|---|
-| `--stockfish` | `engines/stockfish/stockfish-windows-x86-64-universal.exe` | Caminho do executável do Stockfish |
-| `--depth` | `3` | Profundidade máxima de busca do nosso `ChessEngine` |
-| `--our-time` | `1.0` | Limite de tempo por lance do nosso motor, em segundos |
-| `--stockfish-time` | `0.1` | Tempo de busca do Stockfish por lance, em segundos |
-| `--elo` | `1320` | Força-alvo configurada do Stockfish, de `1320` a `3190` |
-| `--our-color` | `white` | Cor do nosso motor: `white` ou `black` |
-| `--max-plies` | `300` | Limite de meios-lances antes de encerrar como inconclusiva |
+> O executável do Stockfish não é instalado pelo `pip`. Recomenda-se manter os binários externos fora do versionamento Git.
 
-O script configura o Stockfish com `UCI_LimitStrength=True` e `UCI_Elo` para reduzir sua força. O Elo é um **alvo de configuração**, não uma classificação medida ou garantida. O parâmetro `--depth` afeta apenas o nosso motor. O Stockfish utiliza uma thread e 16 MB de hash por padrão nessa integração, para reduzir o consumo de recursos.
+### 5.2. Partida individual contra Stockfish
 
-Para usar outro executável ou uma instalação em outro diretório, informe `--stockfish` com o caminho correspondente.
+Para executar uma partida com nosso motor de brancas, profundidade 3, três segundos por lance e Stockfish limitado a 1320 Elo:
 
-#### Controles da interface
+```powershell
+python scripts/stockfish_match_visual.py --depth 3 --our-time 3 --stockfish-time 3 --elo 1320 --our-color white
+```
 
-- **Iniciar / Continuar:** executa automaticamente os próximos lances.
-- **Pausar:** impede a aplicação de novos lances até continuar; a busca já iniciada pode terminar em segundo plano.
-- **Próximo lance:** avança uma jogada por vez.
-- **Reiniciar:** inicia outra partida quando não houver busca em andamento.
-- **Salvar PGN:** exporta a partida para análise posterior, com sugestão de destino na pasta `benchmarks/`.
-- **Intervalo entre movimentos:** ajusta a velocidade de apresentação dos lances.
+Para jogar com as pretas:
 
-A interface exibe o tabuleiro, histórico de movimentos, tempo de execução, informações da busca do nosso motor e resultado final. Caso o limite de meios-lances seja alcançado sem término pelas regras do xadrez, a partida é **inconclusiva**, não um empate.
+```powershell
+python scripts/stockfish_match_visual.py --depth 3 --our-time 3 --stockfish-time 3 --elo 1320 --our-color black
+```
 
-**Limitações atuais:** o Stockfish é iniciado como processo separado a cada lance dele, o que acrescenta tempo de inicialização. A dificuldade é definida na linha de comando e, para alterá-la, é necessário reiniciar o script. O tempo informado é um orçamento por lance, não um relógio completo de competição. Os confrontos contra o Stockfish ainda não constituem uma medição robusta da força do nosso motor; para isso, serão necessárias várias partidas com cores alternadas e condições controladas.
+Para enfrentar Stockfish configurado para 1800 Elo:
 
-## 5. Testes automatizados
+```powershell
+python scripts/stockfish_match_visual.py --depth 3 --our-time 3 --stockfish-time 3 --elo 1800 --our-color white
+```
+
+### 5.3. Confrontos automatizados
+
+O script permite executar baterias de partidas contra diferentes configurações de Elo do Stockfish.
+
+Exemplo:
+
+```powershell
+python scripts/stockfish_match_visual.py --depth 3 --our-time 3 --stockfish-time 3 --elo-levels 1320 1500 1800 --games-per-level 2
+```
+
+Esse comando executa:
+
+| Elo configurado | Partidas |
+|---|---:|
+| 1320 | 2 |
+| 1500 | 2 |
+| 1800 | 2 |
+| **Total** | **6** |
+
+As partidas alternam as cores do nosso motor para permitir comparações mais equilibradas.
+
+Cada motor recebe um orçamento de até 3 segundos por lance.
+
+O nosso motor também permanece limitado à profundidade máxima configurada em `--depth`.
+
+### 5.4. Comparação entre ordenação original e otimizada
+
+O projeto permite comparar duas estratégias de ordenação de movimentos.
+
+**Estratégia original**
+
+```powershell
+python scripts/stockfish_match_visual.py --score-quiet-checks true --depth 3 --our-time 3 --stockfish-time 3 --elo-levels 1320 1500 1800 --games-per-level 2
+```
+
+**Estratégia otimizada**
+
+```powershell
+python scripts/stockfish_match_visual.py --score-quiet-checks false --depth 3 --our-time 3 --stockfish-time 3 --elo-levels 1320 1500 1800 --games-per-level 2
+```
+
+A diferença entre as estratégias é o cálculo antecipado da pontuação de xeques em movimentos tranquilos.
+
+| Configuração | Comportamento |
+|---|---|
+| `true` | Calcula a pontuação de xeques na ordenação |
+| `false` | Evita esse cálculo antecipado |
+
+A otimização não remove os movimentos legais da pesquisa.
+
+O objetivo é reduzir o custo computacional da ordenação, permitindo que o motor utilize melhor seu orçamento de tempo.
+
+A redução de custo não garante, isoladamente, maior força competitiva.
+
+### 5.5. Experimentos com tempos diferentes
+
+**Teste rápido — 0,1 segundo para Stockfish**
+
+```powershell
+python scripts/stockfish_match_visual.py --score-quiet-checks false --depth 3 --our-time 3 --stockfish-time 0.1 --elo-levels 1320 1500 1800 --games-per-level 2
+```
+
+Esse experimento é útil para comparações rápidas, mas concede ao nosso motor um orçamento de busca maior.
+
+**Teste equilibrado por orçamento — 3 segundos para cada motor**
+
+```powershell
+python scripts/stockfish_match_visual.py --score-quiet-checks false --depth 3 --our-time 3 --stockfish-time 3 --elo-levels 1320 1500 1800 --games-per-level 2
+```
+
+Esse experimento concede o mesmo orçamento nominal por lance aos dois motores.
+
+Entretanto, isso não significa igualdade de força: Stockfish utiliza algoritmos, estruturas e otimizações diferentes.
+
+Além disso, a profundidade máxima 3 continua sendo uma limitação exclusiva do nosso motor.
+
+### 5.6. Parâmetros de execução
+
+| Parâmetro | Descrição |
+|---|---|
+| `--stockfish` | Caminho do executável Stockfish |
+| `--depth` | Profundidade máxima do nosso motor |
+| `--our-time` | Tempo máximo de busca do nosso motor por lance |
+| `--stockfish-time` | Tempo de busca concedido ao Stockfish por lance |
+| `--elo` | Elo-alvo configurado do Stockfish |
+| `--elo-levels` | Lista de níveis de Elo para uma bateria |
+| `--games-per-level` | Quantidade de partidas por nível |
+| `--our-color` | Cor do nosso motor |
+| `--score-quiet-checks` | Ativa ou desativa a pontuação antecipada de xeques tranquilos |
+| `--max-plies` | Limite de meios-lances |
+
+Para consultar a lista de parâmetros aceita pela versão instalada:
+
+```powershell
+python scripts/stockfish_match_visual.py --help
+```
+
+### 5.7. Resultados dos confrontos
+
+Os experimentos automatizados armazenam seus resultados em:
+
+```text
+benchmarks/
+└── stockfish_matches/
+    ├── original/
+    │   └── run_YYYYMMDD_HHMMSS_XXXXXX/
+    │       ├── game_001_elo_1320_white.pgn
+    │       ├── game_001_elo_1320_white_moves.csv
+    │       └── summary.csv
+    └── optimized/
+        └── run_YYYYMMDD_HHMMSS_XXXXXX/
+            ├── game_001_elo_1320_white.pgn
+            ├── game_001_elo_1320_white_moves.csv
+            └── summary.csv
+```
+
+Os arquivos possuem funções diferentes:
+
+- **PGN:** histórico completo dos movimentos da partida.
+- **CSV por partida:** informações de desempenho e busca.
+- **summary.csv:** resultados consolidados da bateria.
+
+Os nomes dos diretórios permitem preservar experimentos anteriores sem misturar as configurações original e otimizada.
+
+### 5.8. Limitações dos experimentos
+
+O Stockfish pode ser configurado com `UCI_LimitStrength` e `UCI_Elo` para reduzir sua força.
+
+O Elo informado é um alvo de configuração, não uma classificação competitiva medida ou garantida.
+
+Também é importante considerar:
+
+- O tempo configurado é um orçamento por lance, não o relógio completo da partida.
+- O tempo de inicialização e comunicação com o processo Stockfish pode acrescentar sobrecarga.
+- O limite de profundidade do nosso motor não limita a profundidade do Stockfish.
+- Uma bateria de poucas partidas não permite estimar com precisão a força do motor.
+- Partidas interrompidas por limite de meios-lances devem ser tratadas como inconclusivas, não como empates.
+
+Para uma comparação mais rigorosa, é necessário aumentar a quantidade de partidas, alternar cores e manter configurações reproduzíveis.
+
+## 6. Testes automatizados
 
 O projeto utiliza `pytest`.
 
 Para executar todos os testes:
+
+```powershell
+python -m pytest -q
+```
+
+Para executar com informações detalhadas:
+
 ```powershell
 python -m pytest -v
 ```
+
 Para executar somente a validação final:
+
 ```powershell
 python -m pytest tests/test_final_validation.py -v
 ```
-**Última validação: 91 testes aprovados em 31/10/2026.**
 
 Os testes abrangem:
 
 - Gerenciamento do tabuleiro.
-
 - Avaliação heurística.
-
 - Busca Negamax.
-
-- Quiescência e posições terminais.
-
-- Controle de tempo e timeout.
-
+- Quiescência.
+- Controle de tempo.
 - Tabela de transposição.
-
-- Chaves e histórico de posições.
-
 - Ordenação avançada.
-
 - Métricas de busca.
-
 - Integridade do estado do tabuleiro.
-
-- Consistência entre configurações.
-
+- Detecção de empates.
 - Self-play.
+- Integração das estratégias de busca.
 
-Os testes validam comportamentos importantes, mas não comprovam força competitiva ou ausência de todos os possíveis defeitos.
+Os testes verificam correção e estabilidade funcional, mas não comprovam força competitiva.
 
-## 6. Benchmarks e resultados
+## 7. Benchmarks e análise de desempenho
 
-Os scripts de benchmark permitem comparar configurações do motor em posições de abertura, meio-jogo e final.
+Os benchmarks permitem comparar diferentes configurações do motor e acompanhar o impacto das otimizações.
 
-### 6.1. Tabela de transposição
+### 7.1. Profiling
 
-Executar:
+Identifica funções que consomem mais tempo durante a busca.
+
 ```powershell
-python scripts/benchmark_search.py
+python scripts/profile_engine.py --depth 3 --time 3 --repeats 3
 ```
-Resultados registrados, com profundidade 3:
 
-| Posição | Sem cache | Com cache | Redução de nós |
-|---|---:|---:|---:|
-| Abertura | 1.628 | 1.207 | 25,9% |
-| Meio-jogo | 23.843 | 12.896 | 45,9% |
-| Final | 1.027 | 905 | 11,9% |
+Resultados:
 
-Os resultados estão registrados em `benchmarks/search_benchmark.csv`.
+```text
+benchmarks/profiling/
+```
 
-### 6.2. Ordenação avançada
+### 7.2. Busca e tabela de transposição
 
-Executar:
+Compara configurações da busca e utilização do cache.
+
 ```powershell
-python scripts/benchmark_ordering.py --depth 3 --time 30 --repetitions 3
+python scripts/benchmark_search.py --depth 3 --time 3
 ```
-Resultados registrados:
 
-| Posição | Ordenação original | Avançada | Redução de nós |
-|---|---:|---:|---:|
-| Abertura | 1.207 | 1.143 | 5,3% |
-| Meio-jogo | 12.896 | 8.350 | 35,3% |
-| Final | 905 | 391 | 56,8% |
+Resultado:
 
-Tempos medianos das três repetições:
+```text
+benchmarks/search_benchmark.csv
+```
 
-| Posição | Original | Avançada |
-|---|---:|---:|
-| Abertura | 0,794 s | 0,603 s |
-| Meio-jogo | 6,246 s | 4,686 s |
-| Final | 0,161 s | 0,086 s |
+### 7.3. Ordenação durante a busca
 
-As configurações mantiveram os mesmos movimentos e avaliações nas três posições testadas.
+Compara as estratégias original e otimizada durante a execução completa do motor.
 
-Os resultados estão registrados em `benchmarks/ordering_benchmark.csv`.
+```powershell
+python scripts/benchmark_search_ordering_v2.py --depth 3 --time 3 --repeats 3
+```
 
-Esses benchmarks demonstram ganhos de eficiência nas posições avaliadas. Não representam, isoladamente, um aumento comprovado de força competitiva.
+Resultados:
 
-### 6.3. Comparação da avaliação
+```text
+benchmarks/search_ordering_v2/
+```
 
-O benchmark mede o custo da avaliação e compara o lance escolhido pela versão anterior e pela Etapa 3 em quatro posições. Para reproduzir a execução registrada:
+### 7.4. Ordenação isolada
+
+Mede o custo computacional da ordenação utilizando posições extraídas de partidas PGN.
+
+```powershell
+python scripts/benchmark_move_ordering_v2.py --max-positions 200 --repeats 5
+```
+
+Resultados:
+
+```text
+benchmarks/move_ordering_v2/
+```
+
+**Importante:** esse benchmark precisa encontrar partidas PGN no diretório de entrada.
+
+Portanto, execute primeiro uma bateria contra Stockfish ou forneça um diretório com partidas existentes.
+
+Para utilizar outro diretório:
+
+```powershell
+python scripts/benchmark_move_ordering_v2.py --input benchmarks/stockfish_matches --max-positions 200 --repeats 5
+```
+
+### 7.5. Validação de empates
+
+Compara a implementação original com a otimizada.
+
+```powershell
+python scripts/validate_draw_rules.py --sample-every 1 --repeats 3
+```
+
+Resultados:
+
+```text
+benchmarks/draw_rules_validation/
+```
+
+O benchmark utiliza posições de partidas PGN para verificar equivalência e medir desempenho.
+
+### 7.6. Avaliação heurística
+
+Compara versões da avaliação e seu impacto sobre o desempenho.
+
 ```powershell
 python scripts/benchmark_evaluation.py --depth 3 --time 10 --evaluation-repetitions 300 --repetitions 3 --output benchmarks/evaluation_competition_performance_10s.csv
 ```
-Nas quatro posições, as duas versões escolheram o mesmo lance e concluíram a profundidade 3. O rendimento abaixo é a mediana de três repetições:
 
-| Posição | Lance | Avaliações/s anterior | Avaliações/s Etapa 3 | Profundidade concluída (anterior / Etapa 3) |
-|---|---|---:|---:|---:|
-| Abertura | Nf3 | 31.859,0 | 10.072,5 | 3 / 3 |
-| Meio-jogo | d4 | 32.872,0 | 12.596,3 | 3 / 3 |
-| Final | f4 | 77.806,9 | 51.584,5 | 3 / 3 |
-| Peão passado | e7 | 95.721,3 | 70.928,7 | 3 / 3 |
+A avaliação mais completa pode consumir mais tempo por posição. Por isso, é importante medir tanto a qualidade das decisões quanto o custo computacional.
 
-O throughput da avaliação da Etapa 3 foi menor nas quatro posições: aproximadamente 68% na abertura, 62% no meio-jogo, 34% no final e 26% na posição com peão passado. Com 10 segundos disponíveis, as duas versões concluíram profundidade 3 no meio-jogo; nessa posição, a busca levou medianas de 4,25 s e 4,87 s, respectivamente. As escolhas iguais nesta amostra não provam força equivalente. Os tempos, nós, pontuações e resultados completos ficam em `benchmarks/evaluation_competition_performance_10s.csv`.
+### 7.7. Partidas comparativas da avaliação
 
-### 6.4. Partidas pareadas e ablações da avaliação
+Comparação com o avaliador anterior:
 
-As partidas usam o mesmo motor de busca e limite de tempo para as duas versões, alternam as cores em cada par e atribuem a diferença à avaliação. Para reproduzir os confrontos:
 ```powershell
 python scripts/benchmark_evaluation_matches.py --opponents baseline --pairs 2 --depth 3 --time 3 --max-plies 60 --csv-output benchmarks/evaluation_competition_baseline.csv --pgn-output benchmarks/evaluation_competition_baseline.pgn
+```
 
+Comparação com componentes da avaliação desativados:
+
+```powershell
 python scripts/benchmark_evaluation_matches.py --opponents no_mobility no_pawn_structure no_king_safety --pairs 1 --depth 3 --time 3 --max-plies 60 --csv-output benchmarks/evaluation_competition_ablations.csv --pgn-output benchmarks/evaluation_competition_ablations.pgn
 ```
-O avaliador completo enfrentou a avaliação anterior em duas aberturas, com as cores invertidas: uma vitória e três partidas que chegaram ao limite de 60 meios-lances. Nas ablações, contra a avaliação completa, a versão sem mobilidade teve uma derrota e uma partida inconclusiva; sem estrutura de peões, duas inconclusivas; sem segurança do rei, duas inconclusivas. Não houve amostra suficiente para estimar força, declarar superioridade ou recalibrar os pesos. Os CSVs contêm profundidade, nós, tempo, cor e motivo de término; os PGNs guardam as partidas. Partidas inconclusivas não contam como empate.
 
-O `--time 3` é um limite fixo por busca usado para comparação controlada, não uma reprodução do relógio oficial. O limite de 60 meios-lances reduz a duração do experimento e também causa partidas inconclusivas; os dados devem ser usados como diagnóstico, não como rating competitivo.
+Esses experimentos permitem analisar a contribuição de diferentes componentes da avaliação.
 
-### 6.5. Self-play
+## 8. Ordem recomendada para validação
 
-Uma execução recente utilizou:
-```powershell
-python scripts/self_play.py --depth 3 --time 1 --max-plies 1000
-```
-Resultado observado:
+Após alterações importantes no motor, recomenda-se executar os experimentos nesta ordem:
 
-| Métrica | Resultado |
-|---|---|
-| Resultado | 1-0 |
-| Encerramento | Xeque-mate |
-| Meios-lances | 111 |
-| Tempo total | 88,55 s |
-| Profundidade máxima | 3 |
+1. Testes automatizados.
+2. Profiling do motor.
+3. Benchmark da busca.
+4. Benchmark da ordenação durante a busca.
+5. Partidas contra Stockfish com a estratégia original.
+6. Partidas contra Stockfish com a estratégia otimizada.
+7. Benchmark isolado de ordenação, utilizando os PGNs gerados.
+8. Validação das regras de empate.
 
-A partida incluiu capturas, promoção de peão e encerramento por xeque-mate.
+Essa sequência evita executar benchmarks dependentes de PGNs antes de gerar os arquivos necessários.
 
-O PGN está disponível em `benchmarks/self_play.pgn`.
+Os resultados anteriores devem ser preservados para permitir comparações históricas.
 
-## 7. Limitações conhecidas
+## 9. Limitações conhecidas
 
 Apesar das melhorias, o motor ainda possui limitações relevantes:
 
-1. **Avaliação estratégica ainda simples:** os novos critérios são heurísticas iniciais e precisam ser calibrados em posições e partidas diversas.
+1. **Avaliação estratégica:** os critérios heurísticos precisam de calibração e testes adicionais.
+2. **Profundidade limitada:** posições complexas podem consumir todo o orçamento antes de concluir a profundidade desejada.
+3. **Desempenho em Python:** o custo computacional limita a quantidade de posições pesquisadas por segundo.
+4. **Controle de tempo:** ainda não existe gerenciamento completo do relógio oficial de 25 minutos por jogador.
+5. **Interface competitiva:** a interface visual atual é destinada a experimentos e não à operação oficial do campeonato.
+6. **Avaliação neural:** nenhum modelo de aprendizado de máquina participa das decisões.
+7. **Força competitiva:** os confrontos existentes ainda são insuficientes para estimar um rating confiável.
+8. **Quiescência:** existem oportunidades adicionais de otimização em posições táticas complexas.
+9. **Tabela de transposição:** o comportamento em posições complexas ainda precisa de investigação e profiling adicional.
 
-2. **Profundidade limitada:** posições complexas podem consumir todo o tempo disponível antes de atingir a profundidade máxima.
-
-3. **Busca em Python:** o custo computacional limita a quantidade de posições pesquisadas por segundo.
-
-4. **Controle de tempo da partida:** ainda não existe gerenciamento completo do relógio oficial de 25 minutos por jogador. O benchmark atual impõe um limite fixo a cada busca.
-
-5. **Interface competitiva pendente:** a interface visual atual serve ao self-play, não à entrada e execução de lances em partidas oficiais.
-
-6. **Sem avaliação neural:** nenhum modelo de aprendizado de máquina participa atualmente das decisões.
-
-7. **Força competitiva sem medição robusta:** os confrontos internos desta etapa tiveram poucas partidas decisivas. Ainda faltam partidas contra motores de referência e conjuntos padronizados de posições táticas.
-
-8. **Quiescência e desempenho:** ainda existem oportunidades de otimização em posições táticas complexas.
-
-## 8. Roadmap de desenvolvimento
+## 10. Roadmap de desenvolvimento
 
 ### Etapa 1 — Fundação do projeto
 
 - [x] Estrutura modular em Python.
-
 - [x] Configuração de dependências.
-
 - [x] Gerenciamento do tabuleiro.
-
 - [x] Avaliação heurística inicial.
-
 - [x] Negamax com poda Alfa-Beta.
-
 - [x] Ordenação básica de movimentos.
-
 - [x] Aprofundamento iterativo.
-
 - [x] Controle de tempo por busca.
-
 - [x] Interface inicial pelo terminal.
-
 - [x] Testes automatizados iniciais.
 
 ### Etapa 2 — Otimização da busca
 
 - [x] Busca de quiescência.
-
 - [x] Tabela de transposição.
-
 - [x] Hash Zobrist com informações adicionais de histórico.
-
 - [x] Ordenação avançada de movimentos.
-
 - [x] Killer Moves.
-
 - [x] History Heuristic.
-
 - [x] Métricas de busca.
-
 - [x] Benchmarks comparativos.
-
 - [x] Self-play automatizado.
-
 - [x] Interface visual de self-play.
-
 - [x] Testes de validação e estabilidade funcional.
 
 ### Etapa 3 — Evolução da avaliação
 
 - [x] Tabelas peça-casa por tipo de peça e fase da partida.
-
-- [x] Segurança do rei por abrigo de peões e pressão nas casas vizinhas.
-
-- [x] Estrutura de peões dobrados, isolados e passados.
-
+- [x] Segurança do rei.
+- [x] Estrutura de peões.
 - [x] Mobilidade e atividade das peças.
-
 - [x] Avaliação adaptativa por fase da partida.
-
 - [x] Testes posicionais, táticos e de simetria.
-
-- [x] Comparação reproduzível entre a avaliação anterior e a atual.
+- [x] Comparação reproduzível entre avaliações.
 
 ### Etapa 4 — Preparação competitiva
 
 - [ ] Interface adequada para jogar com brancas ou pretas.
-
 - [ ] Entrada confiável dos movimentos do adversário.
-
 - [ ] Gerenciamento do tempo restante da partida.
-
 - [ ] Recuperação de estado após interrupções, quando permitida.
-
 - [ ] Testes prolongados de estabilidade.
-
-- [x] Integração visual local para partidas contra Stockfish 19.
-- [ ] Realizar séries controladas de partidas contra motores de referência.
-
-- [ ] Avaliação de força de jogo.
-
+- [x] Integração visual local com Stockfish 19.
+- [x] Execução de baterias automatizadas contra Stockfish.
+- [x] Comparação entre estratégias de ordenação.
+- [ ] Séries competitivas com amostras maiores.
+- [ ] Testes contra Stockfish com 3 segundos por lance.
+- [ ] Avaliação robusta da força de jogo.
 - [ ] Validação de funcionamento totalmente offline.
-
 - [ ] Verificação de conformidade com o regulamento.
 
 ### Etapa 5 — Integração opcional de IA
 
 - [ ] Investigar modelos compatíveis com o hardware disponível.
-
 - [ ] Definir contrato para avaliação neural ou política de movimentos.
-
 - [ ] Implementar carregamento e inferência local.
-
 - [ ] Comparar o motor heurístico com uma versão híbrida.
-
-- [ ] Medir consumo de memória, tempo por posição e desempenho.
-
+- [ ] Medir consumo de memória e desempenho.
 - [ ] Manter apenas melhorias com benefícios demonstrados.
 
 A integração de IA é opcional. O objetivo principal permanece o desenvolvimento de um motor autoral, confiável e progressivamente mais competitivo.
 
-## 9. Requisitos do campeonato
+## 11. Requisitos do campeonato
 
-O projeto está sendo desenvolvido para o Chess Challenge III — ICEV 2026.
+O projeto está sendo desenvolvido para o **Chess Challenge III — ICEV 2026**.
 
 Entre os requisitos relevantes estão:
 
 - Execução local durante as partidas.
-
 - Ausência de dependência de serviços online durante o jogo.
-
 - Escolha autônoma dos movimentos.
-
 - Registro dos movimentos realizados pelo adversário.
-
-- Cada jogador dispõe de 25 minutos para a partida; os jogadores operam o relógio e movem as peças no tabuleiro físico.
-
-- O edital prevê envio do software por Git até 04/11/2026 e realização do evento em 06/11/2026.
-
+- Cada jogador dispõe de 25 minutos para a partida.
+- Os jogadores operam o relógio e movem as peças no tabuleiro físico.
+- O edital prevê envio do software por Git até 04/11/2026.
+- A realização do evento está prevista para 06/11/2026.
 - Entrega e validação do código-fonte conforme o regulamento.
 
-O regulamento oficial está publicado em [Edital Chess Challenge III — iCEV 2026](https\://www.somosicev.com/wp-content/uploads/2026/09/Chess-Challenge-III-1.pdf). Como o torneio não define segundos por lance, o benchmark de avaliação usa um limite fixo por busca apenas para manter as versões sob o mesmo orçamento. A conformidade operacional completa ainda precisa ser validada na Etapa 4.
+O regulamento oficial está publicado em:
 
-## 10. Autoria e referências técnicas
+[Edital Chess Challenge III — iCEV 2026](https://www.somosicev.com/wp-content/uploads/2026/09/Chess-Challenge-III-1.pdf)
+
+Como o torneio não define segundos fixos por lance, os benchmarks utilizam limites de tempo por busca apenas para manter os experimentos reproduzíveis.
+
+A conformidade operacional completa ainda precisa ser validada.
+
+## 12. Autoria e referências técnicas
 
 Este projeto está sendo desenvolvido como uma implementação independente para o Chess Challenge III.
 
 A equipe estudou conceitos presentes no projeto **Xeque-LFM**, disponibilizado como referência técnica:
 
-https\://github.com/xInovatechTecnologia/xeque-lfm
+https://github.com/xInovatechTecnologia/xeque-lfm
 
 A referência é utilizada para compreender decisões arquiteturais e estratégias gerais de construção de motores de xadrez.
 
 O código deste projeto é desenvolvido independentemente, utilizando algoritmos clássicos amplamente conhecidos, como Negamax e poda Alfa-Beta.
 
+O Stockfish é utilizado como motor adversário externo, exclusivamente para experimentos e avaliação competitiva.
+
 A utilização de bibliotecas e eventuais modelos externos deverá respeitar suas respectivas licenças e condições de uso.
 
-## 11. Próximo objetivo
+## 13. Próximo objetivo
 
-A Etapa 3 está concluída como implementação e validação inicial. Os benchmarks não demonstraram evidência suficiente para alterar os pesos nem provar ganho competitivo; uma calibração mais ampla pode ser feita se surgirem mais posições e jogos de referência. O próximo trabalho é avançar para a **Etapa 4 — Preparação competitiva**: implementar a interface de operação, integrar o registro de lances adversários para o torneio, gerenciar o relógio da partida e realizar séries controladas de partidas contra o Stockfish.
+A próxima etapa do Chess Challenge III é **melhorar a eficiência da busca e aumentar a força competitiva do motor**.
 
-**Meta:** entregar um motor autoral, estável, executável offline e preparado para a operação real do campeonato.
+As prioridades são:
+
+1. Investigar os gargalos identificados pelo profiling.
+2. Melhorar o aproveitamento da tabela de transposição.
+3. Reduzir o custo da busca em posições complexas.
+4. Aprimorar o gerenciamento do tempo.
+5. Avaliar novas técnicas de busca, como Principal Variation Search e Late Move Reductions, mediante testes controlados.
+6. Executar séries de partidas contra Stockfish com 3 segundos por lance para cada motor.
+7. Preparar a interface e o controle de tempo para as condições oficiais do campeonato.
+
+**Meta:** entregar um motor de xadrez autoral, estável, executável offline e progressivamente mais competitivo, com decisões independentes e desempenho demonstrado por testes reproduzíveis.

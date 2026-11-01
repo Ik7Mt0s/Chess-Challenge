@@ -33,3 +33,6 @@ models/weights/
 # Build
 build/
 dist/
+
+# Benchmarks
+benchmarks_backup/
