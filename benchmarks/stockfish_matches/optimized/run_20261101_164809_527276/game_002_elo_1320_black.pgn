@@ -1,0 +1,16 @@
+[Event "Chess Challenge III vs Stockfish"]
+[Site "?"]
+[Date "2026.11.01"]
+[Round "2"]
+[White "Stockfish 19"]
+[Black "ChessEngine"]
+[Result "0-1"]
+[StockfishElo "1320"]
+[OurDepth "3"]
+[OrderingStrategy "optimized"]
+[ScoreQuietChecks "False"]
+[OurTimePerMove "3.0"]
+[StockfishTimePerMove "3.0"]
+[Termination "CHECKMATE"]
+
+1. c4 Nf6 2. d4 d5 3. Nf3 Nc6 4. cxd5 Nxd5 5. Nc3 Nxc3 6. Qc2 Nb5 7. e3 Nd6 8. e4 Bg4 9. Ne5 Nxe5 10. h3 Nc6 11. e5 Bf5 12. Qxc6+ bxc6 13. g4 Be4 14. Bf4 Bxh1 15. e6 fxe6 16. Be5 Be4 17. Bxd6 cxd6 18. Bd3 Bxd3 19. Rd1 Qa5+ 20. Rd2 Qb4 21. a3 Qxd4 22. Rxd3 Qxd3 23. g5 Qb1+ 24. Kd2 Qxb2+ 25. Ke3 Qxa3+ 26. Ke4 Rb8 27. h4 Rb4# 0-1
