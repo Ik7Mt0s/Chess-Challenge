@@ -1,4 +1,3 @@
-
 import chess
 
 
@@ -102,17 +101,30 @@ class MoveOrderingHeuristics:
 def move_score(
     board: chess.Board,
     move: chess.Move,
+    *,
+    score_quiet_checks: bool = True,
 ) -> int:
     """
-    Pontuação tática original:
-    capturas, promoções e xeques.
+    Calcula a pontuação tática do movimento.
+
+    score_quiet_checks=True:
+        Comportamento original: pontua qualquer xeque.
+
+    score_quiet_checks=False:
+        Pontua xeques apenas em capturas e promoções.
+        Evita board.gives_check() para movimentos silenciosos.
+
+    Essa opção altera a ordenação, não as regras
+    de legalidade nem a avaliação da posição.
     """
     score = 0
 
     attacker = board.piece_at(move.from_square)
     victim = board.piece_at(move.to_square)
 
-    if board.is_en_passant(move):
+    is_en_passant = board.is_en_passant(move)
+
+    if is_en_passant:
         victim_value = PIECE_VALUES[chess.PAWN]
     else:
         victim_value = (
@@ -140,8 +152,11 @@ def move_score(
             + PIECE_VALUES[move.promotion]
         )
 
-    if board.gives_check(move):
-        score += 500
+    is_tactical = bool(victim_value or move.promotion)
+
+    if score_quiet_checks or is_tactical:
+        if board.gives_check(move):
+            score += 500
 
     return score
 
@@ -153,13 +168,19 @@ def order_moves(
     ply: int = 0,
     heuristics: MoveOrderingHeuristics | None = None,
     tt_move: chess.Move | None = None,
+    score_quiet_checks: bool = True,
 ) -> list[chess.Move]:
     """
-    Prioridade:
-    1. Movimento da tabela de transposição.
-    2. Capturas e promoções.
-    3. Killer Moves.
-    4. History Heuristic e demais movimentos.
+    Ordena movimentos usando:
+    - Movimento da tabela de transposição;
+    - Pontuação de capturas e promoções;
+    - Killer Moves;
+    - History Heuristic;
+    - Bônus de xeque, conforme a estratégia escolhida.
+
+    A prioridade entre categorias é determinada
+    pela pontuação combinada, exceto o movimento
+    da tabela de transposição, que vem primeiro.
 
     Mantém compatibilidade com chamadas antigas.
     """
@@ -173,7 +194,11 @@ def order_moves(
         if tt_move is not None and move == tt_move:
             return (1, 0)
 
-        tactical_score = move_score(board, move)
+        tactical_score = move_score(
+            board,
+            move,
+            score_quiet_checks=score_quiet_checks,
+        )
 
         if heuristics is None:
             return (0, tactical_score)

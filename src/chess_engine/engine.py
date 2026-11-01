@@ -41,6 +41,7 @@ class ChessEngine:
         use_transposition_table: bool = True,
         tt_max_entries: int = 20_000,
         use_advanced_ordering: bool = True,
+        score_quiet_checks: bool = True,
     ):
         if max_depth < 1:
             raise ValueError(
@@ -55,6 +56,7 @@ class ChessEngine:
 
         self.max_depth = max_depth
         self.use_advanced_ordering = use_advanced_ordering
+        self.score_quiet_checks = score_quiet_checks
 
         self.transposition_table = (
             TranspositionTable(max_entries=tt_max_entries)
@@ -98,7 +100,11 @@ class ChessEngine:
         )
 
         cache_before = self.cache_stats()
-        legal_moves = order_moves(board)
+
+        legal_moves = order_moves(
+            board,
+            score_quiet_checks=self.score_quiet_checks,
+        )
 
         if not legal_moves:
             raise ValueError(
@@ -161,6 +167,7 @@ class ChessEngine:
                 ply=0,
                 heuristics=ordering_heuristics,
                 tt_move=best_move,
+                score_quiet_checks=self.score_quiet_checks,
             )
 
             try:
@@ -182,6 +189,7 @@ class ChessEngine:
                             ),
                             metrics=metrics,
                             ordering_heuristics=ordering_heuristics,
+                            score_quiet_checks=self.score_quiet_checks,
                         )
                     finally:
                         board.pop()

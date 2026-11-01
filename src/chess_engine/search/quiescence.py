@@ -2,6 +2,7 @@
 import chess
 
 from chess_engine.evaluation.base import PositionEvaluator
+from chess_engine.search.draw_rules import is_draw
 from chess_engine.search.metrics import SearchMetrics
 from chess_engine.search.move_ordering import order_moves
 from chess_engine.utils.time_manager import TimeManager
@@ -19,6 +20,7 @@ def quiescence(
     ply: int = 0,
     max_depth: int = 8,
     metrics: SearchMetrics | None = None,
+    score_quiet_checks: bool = True,
 ) -> int:
     """
     Busca de quiescência com poda Alfa-Beta.
@@ -26,8 +28,8 @@ def quiescence(
     Analisa capturas e promoções em posições normais.
     Quando há xeque, pesquisa todas as respostas legais.
 
-    As métricas são opcionais para preservar
-    compatibilidade com as chamadas anteriores.
+    A configuração score_quiet_checks controla a
+    pontuação dos xeques silenciosos na ordenação.
     """
 
     timer.check()
@@ -38,13 +40,7 @@ def quiescence(
     if board.is_checkmate():
         return -MATE_SCORE + ply
 
-    if (
-        board.is_stalemate()
-        or board.is_insufficient_material()
-        or board.is_seventyfive_moves()
-        or board.is_fivefold_repetition()
-        or board.can_claim_draw()
-    ):
+    if is_draw(board):
         return 0
 
     in_check = board.is_check()
@@ -77,7 +73,11 @@ def quiescence(
     if not moves:
         return alpha
 
-    for move in order_moves(board, moves):
+    for move in order_moves(
+        board,
+        moves,
+        score_quiet_checks=score_quiet_checks,
+    ):
         timer.check()
         board.push(move)
 
@@ -91,6 +91,7 @@ def quiescence(
                 ply=ply + 1,
                 max_depth=max_depth - 1,
                 metrics=metrics,
+                score_quiet_checks=score_quiet_checks,
             )
         finally:
             board.pop()

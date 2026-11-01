@@ -1,6 +1,7 @@
 import chess
 
 from chess_engine.evaluation.base import PositionEvaluator
+from chess_engine.search.draw_rules import is_draw
 from chess_engine.search.metrics import SearchMetrics
 from chess_engine.search.move_ordering import (
     MoveOrderingHeuristics,
@@ -29,6 +30,7 @@ def negamax(
     transposition_table: TranspositionTable | None = None,
     metrics: SearchMetrics | None = None,
     ordering_heuristics: MoveOrderingHeuristics | None = None,
+    score_quiet_checks: bool = True,
 ) -> int:
     timer.check()
 
@@ -38,13 +40,7 @@ def negamax(
     if board.is_checkmate():
         return -MATE_SCORE + ply
 
-    if (
-        board.is_stalemate()
-        or board.is_insufficient_material()
-        or board.is_seventyfive_moves()
-        or board.is_fivefold_repetition()
-        or board.can_claim_draw()
-    ):
+    if is_draw(board):
         return 0
 
     if depth <= 0:
@@ -56,6 +52,7 @@ def negamax(
             timer=timer,
             ply=ply,
             metrics=metrics,
+            score_quiet_checks=score_quiet_checks,
         )
 
     original_alpha = alpha
@@ -95,6 +92,7 @@ def negamax(
         ply=ply,
         heuristics=ordering_heuristics,
         tt_move=cached_move,
+        score_quiet_checks=score_quiet_checks,
     )
 
     for move in moves:
@@ -113,6 +111,7 @@ def negamax(
                 transposition_table=transposition_table,
                 metrics=metrics,
                 ordering_heuristics=ordering_heuristics,
+                score_quiet_checks=score_quiet_checks,
             )
         finally:
             board.pop()
