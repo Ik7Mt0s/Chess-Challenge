@@ -1,7 +1,7 @@
 position,cache_enabled,move,score,depth,status,elapsed,negamax_nodes,quiescence_nodes,total_nodes,alpha_beta_cutoffs,cache_hits,cache_misses,cache_stores,cache_hit_rate
-Abertura,False,g1f3,24,3,completed,0.4505,850,778,1628,739,0,0,0,0.0
-Abertura,True,g1f3,24,3,completed,0.4864,637,570,1207,545,20,59,79,25.32
-Meio-jogo,False,d2d4,360,3,completed,13.0249,5631,18212,23843,12971,0,0,0,0.0
-Meio-jogo,True,d2d4,360,3,completed,7.6937,2829,10067,12896,7076,36,162,198,18.18
-Final,False,f2f4,0,3,completed,0.5503,524,503,1027,403,0,0,0,0.0
-Final,True,f2f4,0,3,completed,0.6302,471,434,905,353,9,80,89,10.11
+Abertura,False,g1f3,44,3,completed,0.1032,629,555,1184,554,0,0,0,0.0
+Abertura,True,g1f3,44,3,completed,0.2086,629,555,1184,554,20,59,79,25.32
+Meio-jogo,False,d2d4,435,3,completed,2.3367,2587,7437,10024,5411,0,0,0,0.0
+Meio-jogo,True,d2d4,399,2,timeout,3.001,1057,5772,6829,3853,20,83,101,19.42
+Final,False,f2f4,18,3,completed,0.0515,147,112,259,105,0,0,0,0.0
+Final,True,f2f4,18,3,completed,0.0564,145,109,254,102,9,27,36,25.0

@@ -1,0 +1,9 @@
+position,strategy,runs,median_elapsed_s,median_total_nodes,median_depth,completed_runs,timeout_runs,fallback_runs
+initial,original,3,0.148741,1184,3,3,0,0
+initial,optimized,3,0.150582,1184,3,3,0,0
+opening,original,3,0.396834,2350,3,3,0,0
+opening,optimized,3,0.262851,2350,3,3,0,0
+middlegame,original,3,3.000395,5511,2,1,2,0
+middlegame,optimized,3,3.000261,7294,2,1,2,0
+endgame,original,3,0.074563,376,3,3,0,0
+endgame,optimized,3,0.064921,376,3,3,0,0

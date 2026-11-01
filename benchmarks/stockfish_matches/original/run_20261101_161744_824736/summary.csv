@@ -1,0 +1,7 @@
+game_id,elo,strategy,our_color,result,our_result,termination,plies,our_moves,stockfish_moves,our_total_seconds,stockfish_total_seconds,our_average_depth,our_total_nodes,our_timeouts,pgn_file,moves_file
+1,1320,original,white,1/2-1/2,draw,THREEFOLD_REPETITION,187,94,93,60.658,59.081,2.86,365887,7,game_001_elo_1320_white.pgn,game_001_elo_1320_white_moves.csv
+2,1320,original,black,0-1,win,CHECKMATE,64,32,32,19.321,20.867,2.94,115473,0,game_002_elo_1320_black.pgn,game_002_elo_1320_black_moves.csv
+3,1500,original,white,1-0,win,CHECKMATE,141,71,70,52.607,50.791,2.92,257440,1,game_003_elo_1500_white.pgn,game_003_elo_1500_white_moves.csv
+4,1500,original,black,0-1,win,CHECKMATE,68,34,34,43.039,20.779,2.68,262415,6,game_004_elo_1500_black.pgn,game_004_elo_1500_black_moves.csv
+5,1800,original,white,0-1,loss,CHECKMATE,112,56,56,43.259,43.513,2.89,222631,0,game_005_elo_1800_white.pgn,game_005_elo_1800_white_moves.csv
+6,1800,original,black,0-1,win,CHECKMATE,66,33,33,35.277,22.488,2.76,197431,3,game_006_elo_1800_black.pgn,game_006_elo_1800_black_moves.csv
