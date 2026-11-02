@@ -14,13 +14,14 @@ class NeuralEvaluator(PositionEvaluator):
     Traduz a saída [-1.0, 1.0] da rede para centipeões na perspectiva do jogador ativo.
     """
 
-    def __init__(self, model_path: str | Path | None = None, model: torch.nn.Module | None = None):
+    def __init__(self, model_path: str | Path | None = "weights/simple_chess_net.pth", model: torch.nn.Module | None = None):
         if model is not None:
             self.model = model
         else:
             self.model = SimpleChessNet()
-            if model_path and Path(model_path).is_file():
-                self.model.load_state_dict(torch.load(model_path, map_location="cpu"))
+            path = Path(model_path) if model_path else None
+            if path and path.is_file():
+                self.model.load_state_dict(torch.load(path, map_location="cpu"))
 
         # Coloca a rede em modo de avaliação (desativa aprendizado/dropout)
         self.model.eval()
