@@ -20,6 +20,8 @@ from chess_engine.utils.time_manager import (
     TimeManager,
 )
 
+from chess_engine.evaluation.neural import HybridEvaluator
+from chess_engine.evaluation.base import PositionEvaluator
 
 @dataclass(frozen=True)
 class SearchResult:
@@ -51,7 +53,7 @@ class ChessEngine:
         self.evaluator = (
             evaluator
             if evaluator is not None
-            else HeuristicEvaluator()
+            else HybridEvaluator()
         )
 
         self.max_depth = max_depth

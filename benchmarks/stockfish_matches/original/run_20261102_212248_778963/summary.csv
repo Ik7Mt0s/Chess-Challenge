@@ -1,0 +1,3 @@
+game_id,elo,strategy,our_color,result,our_result,termination,plies,our_moves,stockfish_moves,our_total_seconds,stockfish_total_seconds,our_average_depth,our_total_nodes,our_timeouts,pgn_file,moves_file
+1,1320,original,white,1-0,win,CHECKMATE,119,60,59,23.777,50.949,2.97,122415,0,game_001_elo_1320_white.pgn,game_001_elo_1320_white_moves.csv
+2,1320,original,black,0-1,win,CHECKMATE,50,25,25,15.603,22.137,2.92,86490,0,game_002_elo_1320_black.pgn,game_002_elo_1320_black_moves.csv

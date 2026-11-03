@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from chess_engine.evaluation.neural import HybridEvaluator, NeuralEvaluator
 
 import chess
 import chess.engine
@@ -27,12 +28,18 @@ except ModuleNotFoundError:
 
 ROOT = Path(__file__).resolve().parents[1]
 
-DEFAULT_STOCKFISH = (
-    ROOT
-    / "engines"
-    / "stockfish"
-    / "stockfish-windows-x86-64-universal.exe"
-)
+def get_default_stockfish() -> Path:
+    stockfish_dir = ROOT / "engines" / "stockfish"
+    default_path = stockfish_dir / "stockfish-windows-x86-64-universal.exe"
+    if default_path.is_file():
+        return default_path
+    
+    executables = list(stockfish_dir.glob("*.exe")) if stockfish_dir.exists() else []
+    if executables:
+        return executables[0]
+    return default_path
+
+DEFAULT_STOCKFISH = get_default_stockfish()
 
 PIECES = {
     "K": "♔", "Q": "♕", "R": "♖",
@@ -185,6 +192,12 @@ class StockfishMatchVisual:
             "original"
             if score_quiet_checks
             else "optimized"
+        )
+        # Procura por volta da linha 195 no corpo do __init__ e ajusta para:
+        self.our_engine = ChessEngine(
+            evaluator=HybridEvaluator(),
+            max_depth=depth,
+            score_quiet_checks=score_quiet_checks,
         )
 
         self.schedule = build_schedule(
