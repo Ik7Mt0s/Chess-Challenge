@@ -1,0 +1,5 @@
+game_id,elo,strategy,ply,fullmove,color,player,san,uci,fen_before,fen_after,score_cp,depth,status,elapsed_seconds,negamax_nodes,quiescence_nodes,total_nodes,alpha_beta_cutoffs,tt_hits,tt_misses,tt_stores,tt_hit_rate
+1,1320,original,1,1,white,ChessEngine,Nf3,g1f3,rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1,rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1,42,3,completed,0.2154,629,555,1184,554,20,59,79,0.25316455696202533
+1,1320,original,2,1,black,Stockfish,d5,d7d5,rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1,rnbqkbnr/ppp1pppp/8/3p4/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2,,,completed,2.9259,,,,,,,,
+1,1320,original,3,2,white,ChessEngine,Nc3,b1c3,rnbqkbnr/ppp1pppp/8/3p4/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2,rnbqkbnr/ppp1pppp/8/3p4/8/2N2N2/PPPPPPPP/R1BQKB1R b KQkq - 1 2,42,3,completed,0.5075,1258,1634,2892,1236,22,162,184,0.11956521739130435
+1,1320,original,4,2,black,Stockfish,c6,c7c6,rnbqkbnr/ppp1pppp/8/3p4/8/2N2N2/PPPPPPPP/R1BQKB1R b KQkq - 1 2,rnbqkbnr/pp2pppp/2p5/3p4/8/2N2N2/PPPPPPPP/R1BQKB1R w KQkq - 0 3,,,completed,0.8127,,,,,,,,

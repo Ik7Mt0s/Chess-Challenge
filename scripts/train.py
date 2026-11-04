@@ -1,4 +1,4 @@
-import os
+import csv
 from pathlib import Path
 import chess
 import torch
@@ -10,11 +10,39 @@ from chess_engine.neural.model import SimpleChessNet
 from chess_engine.neural.representation import board_to_tensor
 
 
-class ChessDataset(Dataset):
+class RealChessDataset(Dataset):
     """
-    Dataset PyTorch para carregar posições de xadrez (FEN) e suas avaliações.
-    A pontuação deve estar no intervalo [-1.0, 1.0].
+    Carrega posições FEN reais e suas avaliações (centipeões) a partir de um arquivo CSV.
     """
+    def __init__(self, csv_filepath: Path | str):
+        self.samples = []
+        path = Path(csv_filepath)
+        if not path.exists():
+            raise FileNotFoundError(f"Arquivo CSV não encontrado em: {path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                fen = row["fen"]
+                # Suporta nomes comuns de coluna: evaluation, score ou cp
+                raw_score = float(row.get("evaluation") or row.get("score") or row.get("cp") or 0.0)
+                # Normaliza centipeões para o intervalo [-1.0, 1.0]
+                normalized_score = max(-1.0, min(1.0, raw_score / 1000.0))
+                self.samples.append((fen, normalized_score))
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        fen, score = self.samples[idx]
+        board = chess.Board(fen)
+        tensor = board_to_tensor(board, flip_black_perspective=True)
+        target = torch.tensor([score], dtype=torch.float32)
+        return tensor, target
+
+
+class SyntheticDataset(Dataset):
+    """Dataset sintético de fallback para validação e testes rápidos."""
     def __init__(self, samples: list[tuple[str, float]]):
         self.samples = samples
 
@@ -30,31 +58,38 @@ class ChessDataset(Dataset):
 
 
 def train_model(
-    data: list[tuple[str, float]],
+    dataset: Dataset,
     epochs: int = 10,
-    batch_size: int = 32,
+    batch_size: int = 64,
     lr: float = 0.001,
-    output_path: str = "weights/simple_chess_net.pth"  # Alterado de models/ para weights/
+    output_path: str = "weights/simple_chess_net.pth"
 ):
     """
-    Executa o loop de treinamento e salva os pesos aprendidos.
+    Executa o treinamento com suporte a aceleração de hardware (GPU/CUDA se disponível).
     """
-    # 1. Preparação dos Dados
-    dataset = ChessDataset(data)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Utilizando dispositivo de processamento: {device}")
 
-    # 2. Inicialização do Modelo, Perda e Otimizador
-    model = SimpleChessNet()
-    criterion = nn.MSELoss()  # Erro Quadrático Médio para regressão
+    dataloader = DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=True, 
+        pin_memory=(device.type == "cuda")
+    )
+
+    model = SimpleChessNet().to(device)
+    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     model.train()
-    print(f"Iniciando treinamento com {len(data)} posições...")
+    print(f"Iniciando treinamento com {len(dataset)} posições...")
 
-    # 3. Loop de Treinamento
     for epoch in range(1, epochs + 1):
         running_loss = 0.0
         for tensors, targets in dataloader:
+            tensors = tensors.to(device)
+            targets = targets.to(device)
+
             optimizer.zero_grad()
             outputs = model(tensors)
             loss = criterion(outputs, targets)
@@ -65,19 +100,28 @@ def train_model(
         epoch_loss = running_loss / len(dataset)
         print(f"Época [{epoch}/{epochs}] - Loss (MSE): {epoch_loss:.6f}")
 
-    # 4. Salvar o arquivo de pesos (.pth)
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), output_path)
-    print(f"Modelo treinado salvo com sucesso em: {output_path}")
+    # Salva os pesos convertendo para CPU para garantir inferência sem erros no motor
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(model.cpu().state_dict(), output_file)
+    print(f"Modelo treinado salvo com sucesso em: {output_file}")
 
 
 if __name__ == "__main__":
-    # Posições sintéticas/exemplo para validação do pipeline (FEN, pontuação)
-    sample_data = [
-        (chess.STARTING_FEN, 0.0),                                                # Posição inicial (equilibrada)
-        ("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1", 0.1),     # 1.e4 (ligeira vantagem branca)
-        ("rnb1kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 0.9),         # Brancas com Dama a mais
-        ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNB1KBNR b KQkq - 0 1", -0.9),        # Pretas com Dama a mais
-    ]
+    csv_path = Path("data/chess_evals.csv")
 
-    train_model(sample_data, epochs=5, batch_size=2)
+    if csv_path.exists():
+        print(f"Carregando dataset real a partir de: {csv_path}")
+        dataset = RealChessDataset(csv_path)
+        # Ajuste batch_size para 64 ou 128 para aceleração do treinamento
+        train_model(dataset, epochs=10, batch_size=64, lr=0.001)
+    else:
+        print(f"Aviso: Arquivo '{csv_path}' não encontrado. Executando fallback com dados sintéticos.")
+        sample_data = [
+            (chess.STARTING_FEN, 0.0),
+            ("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1", 0.1),
+            ("rnb1kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 0.9),
+            ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNB1KBNR b KQkq - 0 1", -0.9),
+        ]
+        dataset = SyntheticDataset(sample_data)
+        train_model(dataset, epochs=5, batch_size=2)
