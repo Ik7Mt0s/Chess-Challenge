@@ -39,6 +39,5 @@ benchmarks_backup/
 
 # Ignora checkpoints temporários de treino
 weights/*.pth
-
 # Mantém apenas o modelo oficial leve do motor
-!weights/simple_chess_net.pth 
+!weights/simple_chess_net.pth  
