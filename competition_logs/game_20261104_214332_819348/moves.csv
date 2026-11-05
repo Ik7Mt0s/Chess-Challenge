@@ -1,0 +1,4 @@
+ply,player,color,san,uci,fen_before,fen_after,score_cp,depth,elapsed_seconds,search_status,total_nodes,quiescence_nodes,neural_inferences
+1,engine,white,Nf3,g1f3,rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1,rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1,0,4,5.0004,timeout,32929,16220,128
+2,opponent,black,f5,f7f5,rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1,rnbqkbnr/ppppp1pp/8/5p2/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2,,,,,,,
+3,engine,white,Nc3,b1c3,rnbqkbnr/ppppp1pp/8/5p2/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2,rnbqkbnr/ppppp1pp/8/5p2/8/2N2N2/PPPPPPPP/R1BQKB1R b KQkq - 1 2,34,4,5.0001,timeout,32663,16331,128

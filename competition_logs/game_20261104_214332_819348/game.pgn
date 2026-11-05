@@ -1,0 +1,15 @@
+[Event "Chess Challenge III - Competicao"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "ChessEngine"]
+[Black "Adversario"]
+[Result "*"]
+[OurEvaluator "HybridEvaluator"]
+[NeuralModel "simple_chess_net.pth"]
+[NeuralWeight "0.4"]
+[NeuralBudget "128"]
+[OurDepth "4"]
+[OurTimePerMove "5.0"]
+
+1. Nf3 f5 2. Nc3 *
