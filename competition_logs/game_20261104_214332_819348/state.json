@@ -1,0 +1,65 @@
+{
+  "our_color": "white",
+  "depth": 4,
+  "think_time": 5.0,
+  "neural_model": "C:\\Users\\icaro\\OneDrive\\Documentos\\Faculdade\\Chess Challenge\\weights\\simple_chess_net.pth",
+  "neural_weight": 0.4,
+  "neural_budget": 128,
+  "use_full_time": true,
+  "fen": "rnbqkbnr/ppppp1pp/8/5p2/8/2N2N2/PPPPPPPP/R1BQKB1R b KQkq - 1 2",
+  "moves": [
+    "g1f3",
+    "f7f5",
+    "b1c3"
+  ],
+  "records": [
+    {
+      "ply": 1,
+      "player": "engine",
+      "color": "white",
+      "san": "Nf3",
+      "uci": "g1f3",
+      "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "fen_after": "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1",
+      "score_cp": 0,
+      "depth": 4,
+      "elapsed_seconds": 5.0004,
+      "search_status": "timeout",
+      "total_nodes": 32929,
+      "quiescence_nodes": 16220,
+      "neural_inferences": 128
+    },
+    {
+      "ply": 2,
+      "player": "opponent",
+      "color": "black",
+      "san": "f5",
+      "uci": "f7f5",
+      "fen_before": "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1",
+      "fen_after": "rnbqkbnr/ppppp1pp/8/5p2/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2",
+      "score_cp": "",
+      "depth": "",
+      "elapsed_seconds": "",
+      "search_status": "",
+      "total_nodes": "",
+      "quiescence_nodes": "",
+      "neural_inferences": ""
+    },
+    {
+      "ply": 3,
+      "player": "engine",
+      "color": "white",
+      "san": "Nc3",
+      "uci": "b1c3",
+      "fen_before": "rnbqkbnr/ppppp1pp/8/5p2/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2",
+      "fen_after": "rnbqkbnr/ppppp1pp/8/5p2/8/2N2N2/PPPPPPPP/R1BQKB1R b KQkq - 1 2",
+      "score_cp": 34,
+      "depth": 4,
+      "elapsed_seconds": 5.0001,
+      "search_status": "timeout",
+      "total_nodes": 32663,
+      "quiescence_nodes": 16331,
+      "neural_inferences": 128
+    }
+  ]
+}

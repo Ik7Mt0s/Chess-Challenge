@@ -1,0 +1,15 @@
+[Event "Chess Challenge III vs Stockfish"]
+[Site "?"]
+[Date "2026.11.04"]
+[Round "1"]
+[White "ChessEngine"]
+[Black "Stockfish 19"]
+[Result "*"]
+[StockfishElo "1320"]
+[OurDepth "3"]
+[OrderingStrategy "original"]
+[ScoreQuietChecks "True"]
+[OurTimePerMove "1.0"]
+[StockfishTimePerMove "0.1"]
+
+1. Nf3 d5 2. Nc3 c6 *
