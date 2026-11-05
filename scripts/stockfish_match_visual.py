@@ -10,36 +10,43 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from chess_engine.evaluation.neural import HybridEvaluator, NeuralEvaluator
 
 import chess
 import chess.engine
 import chess.pgn
+import torch
 
-try:
-    from chess_engine.engine import ChessEngine
-except ModuleNotFoundError:
-    sys.path.insert(
-        0,
-        str(Path(__file__).resolve().parents[1] / "src"),
-    )
-    from chess_engine.engine import ChessEngine
+torch.set_num_threads(1)
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from chess_engine.engine import ChessEngine
+from chess_engine.evaluation.neural import HybridEvaluator, NeuralEvaluator
+
 
 def get_default_stockfish() -> Path:
     stockfish_dir = ROOT / "engines" / "stockfish"
     default_path = stockfish_dir / "stockfish-windows-x86-64-universal.exe"
+
     if default_path.is_file():
         return default_path
-    
-    executables = list(stockfish_dir.glob("*.exe")) if stockfish_dir.exists() else []
-    if executables:
-        return executables[0]
-    return default_path
+
+    executables = (
+        list(stockfish_dir.glob("*.exe"))
+        if stockfish_dir.exists()
+        else []
+    )
+
+    return executables[0] if executables else default_path
+
 
 DEFAULT_STOCKFISH = get_default_stockfish()
+DEFAULT_MODEL = ROOT / "weights" / "simple_chess_net.pth"
 
 PIECES = {
     "K": "♔", "Q": "♕", "R": "♖",
@@ -95,6 +102,7 @@ class MatchRecorder:
             f"game_{config.game_id:03d}_"
             f"elo_{config.elo}_{color}"
         )
+
         return (
             self.output / f"{prefix}.pgn",
             self.output / f"{prefix}_moves.csv",
@@ -103,7 +111,9 @@ class MatchRecorder:
     @staticmethod
     def write_csv(path, fields, rows):
         with path.open(
-            "w", newline="", encoding="utf-8"
+            "w",
+            newline="",
+            encoding="utf-8",
         ) as file:
             writer = csv.DictWriter(
                 file,
@@ -115,17 +125,10 @@ class MatchRecorder:
     def save_game(self, config, game, moves):
         pgn_path, csv_path = self.paths(config)
 
-        with pgn_path.open(
-            "w", encoding="utf-8"
-        ) as file:
+        with pgn_path.open("w", encoding="utf-8") as file:
             print(game, file=file)
 
-        self.write_csv(
-            csv_path,
-            MOVE_FIELDS,
-            moves,
-        )
-
+        self.write_csv(csv_path, MOVE_FIELDS, moves)
         return pgn_path, csv_path
 
     def save_summary(self, summary):
@@ -179,6 +182,8 @@ class StockfishMatchVisual:
         max_plies,
         output,
         score_quiet_checks=True,
+        model_path=DEFAULT_MODEL,
+        weight_neural=0.2,
     ):
         self.root = root
         self.stockfish_path = stockfish_path
@@ -186,18 +191,32 @@ class StockfishMatchVisual:
         self.our_time = our_time
         self.stockfish_time = stockfish_time
         self.max_plies = max_plies
-
         self.score_quiet_checks = score_quiet_checks
+        self.model_path = Path(model_path)
+        self.weight_neural = weight_neural
+
         self.strategy = (
             "original"
             if score_quiet_checks
             else "optimized"
         )
-        # Procura por volta da linha 195 no corpo do __init__ e ajusta para:
+
+        # Carrega explicitamente a rede neural treinada.
+        # Se os pesos não existirem, NeuralEvaluator lança um erro.
+        neural_evaluator = NeuralEvaluator(
+            model_path=self.model_path
+        )
+
+        hybrid_evaluator = HybridEvaluator(
+            neural=neural_evaluator,
+            weight_neural=self.weight_neural,
+        )
+
         self.our_engine = ChessEngine(
-            evaluator=HybridEvaluator(),
+            evaluator=hybrid_evaluator,
             max_depth=depth,
             score_quiet_checks=score_quiet_checks,
+            use_full_time=True,
         )
 
         self.schedule = build_schedule(
@@ -210,11 +229,6 @@ class StockfishMatchVisual:
 
         self.game_index = 0
         self.config = self.schedule[0]
-
-        self.our_engine = ChessEngine(
-            max_depth=depth,
-            score_quiet_checks=score_quiet_checks,
-        )
 
         self.messages = queue.Queue()
         self.generation = 0
@@ -243,7 +257,7 @@ class StockfishMatchVisual:
 
         self.root.title(
             f"Chess Challenge III vs Stockfish "
-            f"— {self.strategy}"
+            f"— {self.strategy} — HybridEvaluator"
         )
         self.root.geometry("1100x740")
         self.root.minsize(930, 650)
@@ -251,10 +265,7 @@ class StockfishMatchVisual:
         self.build_interface()
         self.prepare_game()
 
-        self.root.after(
-            50,
-            self.update_loop,
-        )
+        self.root.after(50, self.update_loop)
 
     def prepare_game(self):
         self.config = self.schedule[self.game_index]
@@ -300,6 +311,15 @@ class StockfishMatchVisual:
         )
         self.game.headers["StockfishTimePerMove"] = str(
             self.stockfish_time
+        )
+
+        # Metadados do avaliador utilizado no benchmark.
+        self.game.headers["OurEvaluator"] = "HybridEvaluator"
+        self.game.headers["NeuralModel"] = (
+            self.model_path.name
+        )
+        self.game.headers["NeuralWeight"] = str(
+            self.weight_neural
         )
 
         self.game_node = self.game
@@ -438,14 +458,8 @@ class StockfishMatchVisual:
                 pady=3,
             )
 
-        controls.columnconfigure(
-            0,
-            weight=1,
-        )
-        controls.columnconfigure(
-            1,
-            weight=1,
-        )
+        controls.columnconfigure(0, weight=1)
+        controls.columnconfigure(1, weight=1)
 
         ttk.Label(
             right,
@@ -496,6 +510,7 @@ class StockfishMatchVisual:
             fill=tk.BOTH,
             expand=True,
         )
+
         scrollbar.config(
             command=self.history.yview
         )
@@ -520,10 +535,7 @@ class StockfishMatchVisual:
 
         for rank in range(7, -1, -1):
             for file in range(8):
-                square = chess.square(
-                    file,
-                    rank,
-                )
+                square = chess.square(file, rank)
 
                 if self.config.our_color == chess.WHITE:
                     display_file = file
@@ -663,10 +675,7 @@ class StockfishMatchVisual:
 
     def clear_history(self):
         self.history.config(state=tk.NORMAL)
-        self.history.delete(
-            "1.0",
-            tk.END,
-        )
+        self.history.delete("1.0", tk.END)
         self.history.config(state=tk.DISABLED)
 
     def start(self):
@@ -1221,12 +1230,31 @@ def main():
         default=None,
     )
 
+    # Caminho explícito para os pesos treinados.
+    parser.add_argument(
+        "--model",
+        type=Path,
+        default=DEFAULT_MODEL,
+    )
+
+    parser.add_argument(
+        "--neural-weight",
+        type=float,
+        default=0.2,
+    )
+
     args = parser.parse_args()
 
     if not args.stockfish.is_file():
         parser.error(
             f"Stockfish não encontrado: "
             f"{args.stockfish}"
+        )
+
+    if not args.model.is_file():
+        parser.error(
+            f"Modelo neural não encontrado: "
+            f"{args.model}"
         )
 
     if args.depth < 1:
@@ -1261,6 +1289,11 @@ def main():
             "entre 1320 e 3190"
         )
 
+    if not 0.0 <= args.neural_weight <= 1.0:
+        parser.error(
+            "--neural-weight deve estar entre 0 e 1"
+        )
+
     score_quiet_checks = (
         args.score_quiet_checks == "true"
     )
@@ -1290,19 +1323,25 @@ def main():
 
     root = tk.Tk()
 
-    StockfishMatchVisual(
-        root=root,
-        stockfish_path=args.stockfish,
-        depth=args.depth,
-        our_time=args.our_time,
-        stockfish_time=args.stockfish_time,
-        levels=args.elo_levels,
-        games_per_level=args.games_per_level,
-        first_color=args.our_color,
-        max_plies=args.max_plies,
-        output=output,
-        score_quiet_checks=score_quiet_checks,
-    )
+    try:
+        StockfishMatchVisual(
+            root=root,
+            stockfish_path=args.stockfish,
+            depth=args.depth,
+            our_time=args.our_time,
+            stockfish_time=args.stockfish_time,
+            levels=args.elo_levels,
+            games_per_level=args.games_per_level,
+            first_color=args.our_color,
+            max_plies=args.max_plies,
+            output=output,
+            score_quiet_checks=score_quiet_checks,
+            model_path=args.model,
+            weight_neural=args.neural_weight,
+        )
+    except Exception:
+        root.destroy()
+        raise
 
     root.mainloop()
 

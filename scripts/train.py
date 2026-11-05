@@ -1,127 +1,209 @@
+import argparse
 import csv
 from pathlib import Path
+
 import chess
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch import nn
+from torch.utils.data import DataLoader, Dataset, random_split
 
 from chess_engine.neural.model import SimpleChessNet
 from chess_engine.neural.representation import board_to_tensor
 
 
 class RealChessDataset(Dataset):
-    """
-    Carrega posições FEN reais e suas avaliações (centipeões) a partir de um arquivo CSV.
-    """
     def __init__(self, csv_filepath: Path | str):
-        self.samples = []
         path = Path(csv_filepath)
-        if not path.exists():
-            raise FileNotFoundError(f"Arquivo CSV não encontrado em: {path}")
 
-        with open(path, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
+        if not path.is_file():
+            raise FileNotFoundError(f"Dataset não encontrado: {path}")
+
+        self.samples = []
+
+        with path.open("r", encoding="utf-8", newline="") as file:
+            reader = csv.DictReader(file)
+
+            if not reader.fieldnames or not {"fen", "evaluation"}.issubset(
+                reader.fieldnames
+            ):
+                raise ValueError(
+                    "O CSV precisa das colunas 'fen' e 'evaluation'."
+                )
+
             for row in reader:
                 fen = row["fen"]
-                # Suporta nomes comuns de coluna: evaluation, score ou cp
-                raw_score = float(row.get("evaluation") or row.get("score") or row.get("cp") or 0.0)
-                # Normaliza centipeões para o intervalo [-1.0, 1.0]
-                normalized_score = max(-1.0, min(1.0, raw_score / 1000.0))
-                self.samples.append((fen, normalized_score))
+                score = float(row["evaluation"])
 
-    def __len__(self) -> int:
+                board = chess.Board(fen)
+
+                # Avaliação original: perspectiva das brancas.
+                # Rede neural: perspectiva de quem joga.
+                if board.turn == chess.BLACK:
+                    score = -score
+
+                target = max(-1.0, min(1.0, score / 1000.0))
+                self.samples.append((fen, target))
+
+        if len(self.samples) < 2:
+            raise ValueError("O dataset precisa de pelo menos 2 posições.")
+
+    def __len__(self):
         return len(self.samples)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        fen, score = self.samples[idx]
+    def __getitem__(self, index):
+        fen, target = self.samples[index]
         board = chess.Board(fen)
-        tensor = board_to_tensor(board, flip_black_perspective=True)
-        target = torch.tensor([score], dtype=torch.float32)
-        return tensor, target
 
+        tensor = board_to_tensor(
+            board,
+            flip_black_perspective=True,
+        )
 
-class SyntheticDataset(Dataset):
-    """Dataset sintético de fallback para validação e testes rápidos."""
-    def __init__(self, samples: list[tuple[str, float]]):
-        self.samples = samples
-
-    def __len__(self) -> int:
-        return len(self.samples)
-
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        fen, score = self.samples[idx]
-        board = chess.Board(fen)
-        tensor = board_to_tensor(board, flip_black_perspective=True)
-        target = torch.tensor([score], dtype=torch.float32)
-        return tensor, target
+        return tensor, torch.tensor([target], dtype=torch.float32)
 
 
 def train_model(
-    dataset: Dataset,
-    epochs: int = 10,
-    batch_size: int = 64,
-    lr: float = 0.001,
-    output_path: str = "weights/simple_chess_net.pth"
+    csv_path: Path,
+    output_path: Path,
+    epochs: int,
+    batch_size: int,
+    learning_rate: float,
+    seed: int,
 ):
-    """
-    Executa o treinamento com suporte a aceleração de hardware (GPU/CUDA se disponível).
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Utilizando dispositivo de processamento: {device}")
+    torch.manual_seed(seed)
 
-    dataloader = DataLoader(
-        dataset, 
-        batch_size=batch_size, 
-        shuffle=True, 
-        pin_memory=(device.type == "cuda")
+    dataset = RealChessDataset(csv_path)
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else "cpu"
+    )
+
+    validation_size = max(1, int(len(dataset) * 0.1))
+    training_size = len(dataset) - validation_size
+
+    train_dataset, validation_dataset = random_split(
+        dataset,
+        [training_size, validation_size],
+        generator=torch.Generator().manual_seed(seed),
+    )
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        pin_memory=device.type == "cuda",
+    )
+
+    validation_loader = DataLoader(
+        validation_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        pin_memory=device.type == "cuda",
     )
 
     model = SimpleChessNet().to(device)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=learning_rate,
+    )
 
-    model.train()
-    print(f"Iniciando treinamento com {len(dataset)} posições...")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    best_validation_loss = float("inf")
+
+    print(f"Dispositivo: {device}")
+    print(f"Treinamento: {training_size:,} posições")
+    print(f"Validação: {validation_size:,} posições")
 
     for epoch in range(1, epochs + 1):
-        running_loss = 0.0
-        for tensors, targets in dataloader:
+        model.train()
+        training_loss = 0.0
+
+        for tensors, targets in train_loader:
             tensors = tensors.to(device)
             targets = targets.to(device)
 
             optimizer.zero_grad()
-            outputs = model(tensors)
-            loss = criterion(outputs, targets)
+
+            predictions = model(tensors)
+            loss = criterion(predictions, targets)
+
             loss.backward()
             optimizer.step()
-            running_loss += loss.item() * tensors.size(0)
 
-        epoch_loss = running_loss / len(dataset)
-        print(f"Época [{epoch}/{epochs}] - Loss (MSE): {epoch_loss:.6f}")
+            training_loss += loss.item() * tensors.size(0)
 
-    # Salva os pesos convertendo para CPU para garantir inferência sem erros no motor
-    output_file = Path(output_path)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.cpu().state_dict(), output_file)
-    print(f"Modelo treinado salvo com sucesso em: {output_file}")
+        training_loss /= training_size
+
+        model.eval()
+        validation_loss = 0.0
+
+        with torch.no_grad():
+            for tensors, targets in validation_loader:
+                tensors = tensors.to(device)
+                targets = targets.to(device)
+
+                predictions = model(tensors)
+                loss = criterion(predictions, targets)
+
+                validation_loss += loss.item() * tensors.size(0)
+
+        validation_loss /= validation_size
+
+        print(
+            f"Época {epoch}/{epochs} "
+            f"| Treino: {training_loss:.6f} "
+            f"| Validação: {validation_loss:.6f}"
+        )
+
+        if validation_loss < best_validation_loss:
+            best_validation_loss = validation_loss
+
+            torch.save(
+                {
+                    key: value.detach().cpu()
+                    for key, value in model.state_dict().items()
+                },
+                output_path,
+            )
+
+            print(f"Melhor modelo salvo: {output_path}")
+
+    print(
+        f"Treinamento concluído. "
+        f"Melhor perda de validação: {best_validation_loss:.6f}"
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=Path("data/chess_evals.csv"),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("weights/simple_chess_net.pth"),
+    )
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--seed", type=int, default=42)
+
+    args = parser.parse_args()
+
+    train_model(
+        csv_path=args.csv,
+        output_path=args.output,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.lr,
+        seed=args.seed,
+    )
 
 
 if __name__ == "__main__":
-    csv_path = Path("data/chess_evals.csv")
-
-    if csv_path.exists():
-        print(f"Carregando dataset real a partir de: {csv_path}")
-        dataset = RealChessDataset(csv_path)
-        # Ajuste batch_size para 64 ou 128 para aceleração do treinamento
-        train_model(dataset, epochs=10, batch_size=64, lr=0.001)
-    else:
-        print(f"Aviso: Arquivo '{csv_path}' não encontrado. Executando fallback com dados sintéticos.")
-        sample_data = [
-            (chess.STARTING_FEN, 0.0),
-            ("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1", 0.1),
-            ("rnb1kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 0.9),
-            ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNB1KBNR b KQkq - 0 1", -0.9),
-        ]
-        dataset = SyntheticDataset(sample_data)
-        train_model(dataset, epochs=5, batch_size=2)
+    main()
