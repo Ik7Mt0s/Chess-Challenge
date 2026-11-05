@@ -1,9 +1,10 @@
+
 from dataclasses import dataclass, field
 
 import chess
 
 from chess_engine.evaluation.base import PositionEvaluator
-from chess_engine.evaluation.heuristic import HeuristicEvaluator
+from chess_engine.evaluation.neural import HybridEvaluator
 from chess_engine.search.metrics import SearchMetrics
 from chess_engine.search.move_ordering import (
     MoveOrderingHeuristics,
@@ -20,8 +21,6 @@ from chess_engine.utils.time_manager import (
     TimeManager,
 )
 
-from chess_engine.evaluation.neural import HybridEvaluator
-from chess_engine.evaluation.base import PositionEvaluator
 
 @dataclass(frozen=True)
 class SearchResult:
@@ -31,11 +30,13 @@ class SearchResult:
     elapsed: float
 
     status: str = "completed"
-    metrics: dict[str, int] = field(default_factory=dict)
+    metrics: dict[str, int | float] = field(default_factory=dict)
     cache: dict[str, int | float] = field(default_factory=dict)
 
 
 class ChessEngine:
+    MAX_SEARCH_DEPTH = 64
+
     def __init__(
         self,
         evaluator: PositionEvaluator | None = None,
@@ -44,6 +45,7 @@ class ChessEngine:
         tt_max_entries: int = 20_000,
         use_advanced_ordering: bool = True,
         score_quiet_checks: bool = True,
+        use_full_time: bool = False,
     ):
         if max_depth < 1:
             raise ValueError(
@@ -57,6 +59,10 @@ class ChessEngine:
         )
 
         self.max_depth = max_depth
+
+
+        self.use_full_time = use_full_time
+
         self.use_advanced_ordering = use_advanced_ordering
         self.score_quiet_checks = score_quiet_checks
 
@@ -92,6 +98,15 @@ class ChessEngine:
                 "A partida já terminou."
             )
 
+        begin_search = getattr(
+            self.evaluator,
+            "begin_search",
+            None,
+        )
+
+        if callable(begin_search):
+            begin_search()
+
         timer = TimeManager(time_limit)
         metrics = SearchMetrics()
 
@@ -113,6 +128,8 @@ class ChessEngine:
                 "Não existem movimentos legais."
             )
 
+        # Movimento de emergência, caso o tempo acabe
+        # antes de concluir uma única profundidade.
         best_move = legal_moves[0]
         best_score = 0
         completed_depth = 0
@@ -124,9 +141,11 @@ class ChessEngine:
             hits = int(
                 cache_after["hits"] - cache_before["hits"]
             )
+
             misses = int(
                 cache_after["misses"] - cache_before["misses"]
             )
+
             stores = int(
                 cache_after["stores"] - cache_before["stores"]
             )
@@ -143,26 +162,79 @@ class ChessEngine:
                 ),
             }
 
+            elapsed = timer.elapsed()
+            search_metrics = metrics.as_dict().copy()
+
+            negamax_nodes = int(
+                search_metrics.get("negamax_nodes", 0)
+            )
+
+            quiescence_nodes = int(
+                search_metrics.get("quiescence_nodes", 0)
+            )
+
+            total_nodes = (
+                negamax_nodes + quiescence_nodes
+            )
+
+            search_metrics["total_nodes"] = total_nodes
+
+            search_metrics["nps"] = (
+                total_nodes / elapsed
+                if elapsed > 0
+                else 0.0
+            )
+
+            inference_stats = getattr(
+                self.evaluator,
+                "inference_stats",
+                None,
+            )
+
+            if callable(inference_stats):
+                search_metrics.update(inference_stats())
+
             return SearchResult(
                 move=best_move,
                 score=best_score,
                 depth=completed_depth,
-                elapsed=timer.elapsed(),
+                elapsed=elapsed,
                 status=status,
-                metrics=metrics.as_dict(),
+                metrics=search_metrics,
                 cache=cache_metrics,
             )
 
+        # Se só existe um movimento legal, não é
+        # necessário pesquisar alternativas.
         if len(legal_moves) == 1:
             return build_result("forced")
 
-        for depth in range(1, self.max_depth + 1):
+        # No modo antigo, max_depth é o limite.
+        # No novo modo, continuamos tentando profundidades
+        # maiores enquanto o tempo permitir.
+        depth_limit = (
+            max(self.max_depth, self.MAX_SEARCH_DEPTH)
+            if self.use_full_time
+            else self.max_depth
+        )
+
+        for depth in range(1, depth_limit + 1):
+            # Nunca iniciar uma nova iteração
+            # quando o prazo já terminou.
+            try:
+                timer.check()
+            except SearchTimeout:
+                timed_out = True
+                break
+
             iteration_move = None
             iteration_score = -INFINITY
 
             alpha = -INFINITY
             beta = INFINITY
 
+            # A última melhor jogada tem prioridade
+            # na nova iteração: PV move ordering.
             ordered = order_moves(
                 board,
                 legal_moves,
@@ -175,6 +247,7 @@ class ChessEngine:
             try:
                 for move in ordered:
                     timer.check()
+
                     board.push(move)
 
                     try:
@@ -206,13 +279,25 @@ class ChessEngine:
                 timed_out = True
                 break
 
+            # Só atualizamos a jogada principal depois
+            # de completar TODOS os movimentos da raiz.
+            # Uma iteração incompleta nunca substitui
+            # o resultado de uma profundidade concluída.
             if iteration_move is not None:
                 best_move = iteration_move
                 best_score = iteration_score
                 completed_depth = depth
 
+            # Se encontramos uma sequência de mate
+            # suficientemente próxima, não precisamos
+            # gastar tempo procurando além dela.
             if best_score >= MATE_SCORE - 1000:
                 break
+
+            # Em modo de profundidade fixa, o próprio
+            # depth_limit encerra a busca.
+            # Em modo de tempo, a próxima iteração começa
+            # e o TimeManager determina quando parar.
 
         if completed_depth == 0:
             return build_result("fallback")
