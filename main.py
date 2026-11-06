@@ -78,8 +78,9 @@ def create_competition_engine(
     return ChessEngine(
         evaluator=evaluator,
         max_depth=depth,
+        use_pvs=True,
         use_full_time=True,
-        early_stop_enabled=True,
+        early_stop_enabled=False,
         use_transposition_table=True,
         tt_max_entries=TT_MAX_ENTRIES,
         use_advanced_ordering=True,
@@ -1718,7 +1719,8 @@ class ChessCompetitionApp:
             "neural_weight": NEURAL_WEIGHT,
             "neural_budget": NEURAL_BUDGET,
             "use_full_time": True,
-            "early_stop_enabled": True,
+            "use_pvs": True,
+            "early_stop_enabled": False,
             "fen": self.board.fen(),
             "moves": [
                 move.uci()
