@@ -175,6 +175,7 @@ def quiescence(
         board,
         moves,
         score_quiet_checks=score_quiet_checks,
+        use_see=True,
     )
 
     for move in ordered:

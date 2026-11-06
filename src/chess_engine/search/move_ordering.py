@@ -14,6 +14,84 @@ KILLER_FIRST_BONUS = 7_000
 KILLER_SECOND_BONUS = 6_500
 MAX_HISTORY_BONUS = 4_000
 MAX_HISTORY_SCORE = 100_000
+SEE_NON_LOSING_BONUS = 20_000
+
+
+def _capture_gain(
+    board: chess.Board,
+    move: chess.Move,
+) -> int:
+    if board.is_en_passant(move):
+        captured_value = PIECE_VALUES[chess.PAWN]
+    else:
+        captured = board.piece_at(move.to_square)
+        captured_value = (
+            PIECE_VALUES[captured.piece_type]
+            if captured is not None
+            else 0
+        )
+
+    promotion_gain = (
+        PIECE_VALUES[move.promotion]
+        - PIECE_VALUES[chess.PAWN]
+        if move.promotion is not None
+        else 0
+    )
+
+    return captured_value + promotion_gain
+
+
+def _best_recapture_gain(
+    board: chess.Board,
+    target_square: chess.Square,
+) -> int:
+    best_gain = 0
+    target_mask = chess.BB_SQUARES[target_square]
+
+    for move in board.generate_legal_captures(
+        to_mask=target_mask,
+    ):
+        gain = _capture_gain(board, move)
+        board.push(move)
+
+        try:
+            gain -= _best_recapture_gain(
+                board,
+                target_square,
+            )
+        finally:
+            board.pop()
+
+        best_gain = max(best_gain, gain)
+
+    return best_gain
+
+
+def static_exchange_evaluation(
+    board: chess.Board,
+    move: chess.Move,
+) -> int:
+    """Estima o saldo material de uma troca no destino.
+
+    Considera apenas recapturas legais no mesmo quadrado.
+    Cada lado pode encerrar a sequencia quando continuar a
+    troca for desfavoravel. O tabuleiro sempre e restaurado.
+    """
+    if not board.is_capture(move) and move.promotion is None:
+        return 0
+
+    gain = _capture_gain(board, move)
+    target_square = move.to_square
+
+    board.push(move)
+
+    try:
+        return gain - _best_recapture_gain(
+            board,
+            target_square,
+        )
+    finally:
+        board.pop()
 
 
 class MoveOrderingHeuristics:
@@ -169,6 +247,7 @@ def order_moves(
     heuristics: MoveOrderingHeuristics | None = None,
     tt_move: chess.Move | None = None,
     score_quiet_checks: bool = True,
+    use_see: bool = False,
 ) -> list[chess.Move]:
     """
     Ordena movimentos usando:
@@ -199,6 +278,19 @@ def order_moves(
             move,
             score_quiet_checks=score_quiet_checks,
         )
+
+        if use_see and (
+            board.is_capture(move) or move.promotion
+        ):
+            see_score = static_exchange_evaluation(
+                board,
+                move,
+            )
+
+            tactical_score += see_score
+
+            if see_score >= 0:
+                tactical_score += SEE_NON_LOSING_BONUS
 
         if heuristics is None:
             return (0, tactical_score)
