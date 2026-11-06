@@ -60,6 +60,7 @@ DARK = "#B58863"
 LAST_MOVE = "#CDD26A"
 CHECK = "#E57373"
 SQUARE = 64
+DEFAULT_VISUAL_INTERVAL = 0.0
 
 MOVE_FIELDS = [
     "game_id", "elo", "strategy", "ply",
@@ -87,6 +88,17 @@ class GameConfig:
     game_id: int
     elo: int
     our_color: chess.Color
+
+
+def ordering_strategy_name(
+    score_quiet_checks: bool,
+) -> str:
+    base = (
+        "original"
+        if score_quiet_checks
+        else "optimized"
+    )
+    return f"{base}-see-pvs"
 
 
 class MatchRecorder:
@@ -195,10 +207,8 @@ class StockfishMatchVisual:
         self.model_path = Path(model_path)
         self.weight_neural = weight_neural
 
-        self.strategy = (
-            "original"
-            if score_quiet_checks
-            else "optimized"
+        self.strategy = ordering_strategy_name(
+            score_quiet_checks
         )
 
         # Carrega explicitamente a rede neural treinada.
@@ -216,6 +226,7 @@ class StockfishMatchVisual:
             evaluator=hybrid_evaluator,
             max_depth=depth,
             score_quiet_checks=score_quiet_checks,
+            use_pvs=True,
             use_full_time=True,
         )
 
@@ -241,7 +252,9 @@ class StockfishMatchVisual:
         self.next_move_at = 0.0
         self.next_game_at = None
 
-        self.speed_var = tk.DoubleVar(value=0.3)
+        self.speed_var = tk.DoubleVar(
+            value=DEFAULT_VISUAL_INTERVAL
+        )
         self.status_var = tk.StringVar(
             value="Pronto para iniciar."
         )
@@ -306,6 +319,8 @@ class StockfishMatchVisual:
         self.game.headers["ScoreQuietChecks"] = str(
             self.score_quiet_checks
         )
+        self.game.headers["QuiescenceSEE"] = "True"
+        self.game.headers["PVS"] = "True"
         self.game.headers["OurTimePerMove"] = str(
             self.our_time
         )
@@ -1298,10 +1313,8 @@ def main():
         args.score_quiet_checks == "true"
     )
 
-    strategy = (
-        "original"
-        if score_quiet_checks
-        else "optimized"
+    strategy = ordering_strategy_name(
+        score_quiet_checks
     )
 
     output = args.output
