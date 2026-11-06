@@ -37,6 +37,12 @@ class SearchResult:
 class ChessEngine:
     MAX_SEARCH_DEPTH = 64
 
+    # Parada antecipada conservadora.
+    EARLY_STOP_MIN_DEPTH = 4
+    EARLY_STOP_STABLE_DEPTHS = 3
+    EARLY_STOP_SCORE_TOLERANCE = 25
+    EARLY_STOP_MIN_TIME_FRACTION = 0.35
+
     def __init__(
         self,
         evaluator: PositionEvaluator | None = None,
@@ -46,6 +52,7 @@ class ChessEngine:
         use_advanced_ordering: bool = True,
         score_quiet_checks: bool = True,
         use_full_time: bool = False,
+        early_stop_enabled: bool = False,
     ):
         if max_depth < 1:
             raise ValueError(
@@ -59,9 +66,11 @@ class ChessEngine:
         )
 
         self.max_depth = max_depth
-
-
         self.use_full_time = use_full_time
+
+        # A parada antecipada so e utilizada no modo
+        # de busca por tempo e quando ativada.
+        self.early_stop_enabled = early_stop_enabled
 
         self.use_advanced_ordering = use_advanced_ordering
         self.score_quiet_checks = score_quiet_checks
@@ -95,7 +104,7 @@ class ChessEngine:
     ) -> SearchResult:
         if board.is_game_over(claim_draw=True):
             raise ValueError(
-                "A partida já terminou."
+                "A partida ja terminou."
             )
 
         begin_search = getattr(
@@ -125,15 +134,25 @@ class ChessEngine:
 
         if not legal_moves:
             raise ValueError(
-                "Não existem movimentos legais."
+                "Nao existem movimentos legais."
             )
 
-        # Movimento de emergência, caso o tempo acabe
-        # antes de concluir uma única profundidade.
+        # Movimento de reserva caso o tempo acabe
+        # antes de qualquer profundidade concluida.
         best_move = legal_moves[0]
         best_score = 0
         completed_depth = 0
         timed_out = False
+        early_stopped = False
+
+        # Historico da estabilidade entre profundidades.
+        previous_completed_move = None
+        previous_completed_score = None
+        stable_depths = 0
+
+        # Nao encerramos uma busca antecipadamente
+        # enquanto o jogador estiver em xeque.
+        root_in_check = board.is_check()
 
         def build_result(status: str) -> SearchResult:
             cache_after = self.cache_stats()
@@ -185,6 +204,12 @@ class ChessEngine:
                 else 0.0
             )
 
+            search_metrics["early_stopped"] = int(
+                early_stopped
+            )
+
+            search_metrics["stable_depths"] = stable_depths
+
             inference_stats = getattr(
                 self.evaluator,
                 "inference_stats",
@@ -204,14 +229,12 @@ class ChessEngine:
                 cache=cache_metrics,
             )
 
-        # Se só existe um movimento legal, não é
-        # necessário pesquisar alternativas.
+        # Apenas um lance legal: nao precisamos pesquisar.
         if len(legal_moves) == 1:
             return build_result("forced")
 
-        # No modo antigo, max_depth é o limite.
-        # No novo modo, continuamos tentando profundidades
-        # maiores enquanto o tempo permitir.
+        # Com use_full_time, max_depth nao limita
+        # a profundidade maxima.
         depth_limit = (
             max(self.max_depth, self.MAX_SEARCH_DEPTH)
             if self.use_full_time
@@ -219,8 +242,6 @@ class ChessEngine:
         )
 
         for depth in range(1, depth_limit + 1):
-            # Nunca iniciar uma nova iteração
-            # quando o prazo já terminou.
             try:
                 timer.check()
             except SearchTimeout:
@@ -233,8 +254,8 @@ class ChessEngine:
             alpha = -INFINITY
             beta = INFINITY
 
-            # A última melhor jogada tem prioridade
-            # na nova iteração: PV move ordering.
+            # Melhor lance anterior tem prioridade
+            # na nova iteracao.
             ordered = order_moves(
                 board,
                 legal_moves,
@@ -279,25 +300,70 @@ class ChessEngine:
                 timed_out = True
                 break
 
-            # Só atualizamos a jogada principal depois
-            # de completar TODOS os movimentos da raiz.
-            # Uma iteração incompleta nunca substitui
-            # o resultado de uma profundidade concluída.
-            if iteration_move is not None:
-                best_move = iteration_move
-                best_score = iteration_score
-                completed_depth = depth
+            # Nunca substituimos a melhor jogada
+            # com uma iteracao incompleta.
+            if iteration_move is None:
+                continue
 
-            # Se encontramos uma sequência de mate
-            # suficientemente próxima, não precisamos
-            # gastar tempo procurando além dela.
+            best_move = iteration_move
+            best_score = iteration_score
+            completed_depth = depth
+
+            # Verifica se a jogada e a avaliacao
+            # permaneceram estaveis entre iteracoes.
+            same_move = (
+                previous_completed_move == best_move
+            )
+
+            similar_score = (
+                previous_completed_score is not None
+                and abs(
+                    previous_completed_score - best_score
+                ) <= self.EARLY_STOP_SCORE_TOLERANCE
+            )
+
+            if same_move and similar_score:
+                stable_depths += 1
+            else:
+                stable_depths = 1
+
+            previous_completed_move = best_move
+            previous_completed_score = best_score
+
+            # Mate suficientemente proximo:
+            # comportamento ja existente.
             if best_score >= MATE_SCORE - 1000:
                 break
 
-            # Em modo de profundidade fixa, o próprio
-            # depth_limit encerra a busca.
-            # Em modo de tempo, a próxima iteração começa
-            # e o TimeManager determina quando parar.
+            # Parada antecipada somente se:
+            #
+            # - A busca e controlada por tempo;
+            # - O recurso esta habilitado;
+            # - Uma profundidade segura foi concluida;
+            # - A jogada ficou estavel em tres
+            #   profundidades consecutivas;
+            # - A avaliacao nao oscilou muito;
+            # - Pelo menos 35% do tempo foi utilizado;
+            # - O jogador nao esta em xeque.
+            #
+            # Isso e uma heuristica de economia de
+            # tempo, nao uma prova de jogada otima.
+            can_stop_early = (
+                self.use_full_time
+                and self.early_stop_enabled
+                and not root_in_check
+                and completed_depth >= self.EARLY_STOP_MIN_DEPTH
+                and stable_depths >= self.EARLY_STOP_STABLE_DEPTHS
+                and timer.elapsed()
+                >= (
+                    time_limit
+                    * self.EARLY_STOP_MIN_TIME_FRACTION
+                )
+            )
+
+            if can_stop_early:
+                early_stopped = True
+                break
 
         if completed_depth == 0:
             return build_result("fallback")

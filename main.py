@@ -18,9 +18,9 @@ from chess_engine.evaluation.neural import HybridEvaluator, NeuralEvaluator
 
 BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = BASE_DIR / "competition_logs"
-
 MODEL_PATH = BASE_DIR / "weights" / "simple_chess_net.pth"
 
+# Configuracoes competitivas
 COMPETITION_DEPTH = 4
 COMPETITION_TIME = 5.0
 NEURAL_WEIGHT = 0.40
@@ -29,27 +29,32 @@ NEURAL_LAZY_THRESHOLD = 300
 NEURAL_CACHE_SIZE = 4096
 TT_MAX_ENTRIES = 20_000
 
+# Cores do tabuleiro
 LIGHT = "#EEEED2"
 DARK = "#769656"
 SELECTED = "#F6F669"
 LAST_MOVE = "#BACA44"
 TARGET = "#4D8754"
 
+# Cores de xeque e xeque-mate
+CHECK_SQUARE = "#E76F6F"
+CHECKMATE_SQUARE = "#BD3434"
+CHECK_BORDER = "#8B1E1E"
+
+# Cores das pecas
 WHITE_PIECE_FILL = "#FFFDF5"
 WHITE_PIECE_OUTLINE = "#242A30"
 BLACK_PIECE_FILL = "#202428"
 BLACK_PIECE_OUTLINE = "#F5F0DD"
 
 PIECE_FONT = ("Segoe UI Symbol", 46)
+
 OUTLINE_OFFSETS = (
     (-2, -2), (-2, 0), (-2, 2),
     (0, -2),           (0, 2),
     (2, -2),  (2, 0),  (2, 2),
 )
 
-# Utilizamos glifos preenchidos para as duas cores.
-# A cor das pecas e determinada pelo preenchimento
-# e pelo contorno, nao pelo simbolo Unicode.
 PIECES = {
     "K": "♚", "Q": "♛", "R": "♜",
     "B": "♝", "N": "♞", "P": "♟",
@@ -62,17 +67,16 @@ def create_competition_engine(
     depth: int = COMPETITION_DEPTH,
 ):
     """
-    Configuracao preservada para a competicao.
+    Configuracao do ChessEngine para competicao.
 
-    Modelo: simple_chess_net.pth
-    Peso neural: 40%
+    Rede neural: 40%
     Heuristica original: 60%
-    Limite neural: 128 novas inferencias por busca
-    Busca: aprofundamento iterativo por tempo
-    TT e ordenacao avancada: habilitadas
-
-    Nao utiliza a heuristica king_safety experimental.
+    Inferencias neurais: 128
+    Busca iterativa por tempo
+    Parada antecipada por estabilidade
+    TT e ordenacao avancada habilitadas
     """
+
     if not MODEL_PATH.is_file():
         raise FileNotFoundError(
             f"Modelo neural nao encontrado: {MODEL_PATH}"
@@ -92,6 +96,7 @@ def create_competition_engine(
         evaluator=evaluator,
         max_depth=depth,
         use_full_time=True,
+        early_stop_enabled=True,
         use_transposition_table=True,
         tt_max_entries=TT_MAX_ENTRIES,
         use_advanced_ordering=True,
@@ -103,8 +108,8 @@ class ChessCompetitionApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Chess Challenge III — Competicao")
-        self.root.geometry("1000x730")
-        self.root.minsize(900, 650)
+        self.root.geometry("1000x760")
+        self.root.minsize(900, 690)
 
         self.board = chess.Board()
         self.engine = None
@@ -124,6 +129,10 @@ class ChessCompetitionApp:
         self.records = []
         self.log_dir = None
 
+        # Impede que o aviso de fim de jogo
+        # seja exibido mais de uma vez.
+        self.finished_notified = False
+
         self.color_var = tk.StringVar(value="white")
         self.depth_var = tk.StringVar(
             value=str(COMPETITION_DEPTH)
@@ -140,6 +149,10 @@ class ChessCompetitionApp:
         )
         self.turn_var = tk.StringVar(
             value="Partida nao iniciada"
+        )
+
+        self.game_alert_var = tk.StringVar(
+            value="Aguardando inicio da partida"
         )
 
         self.square_size = 70
@@ -166,11 +179,26 @@ class ChessCompetitionApp:
         self.canvas.pack()
         self.canvas.bind("<Button-1>", self.on_board_click)
 
+        # Aviso visual principal da partida.
+        self.game_alert = tk.Label(
+            board_area,
+            textvariable=self.game_alert_var,
+            font=("Segoe UI", 13, "bold"),
+            fg="#333333",
+            bg="#E5E7EB",
+            pady=9,
+            anchor="center",
+        )
+        self.game_alert.pack(
+            fill=tk.X,
+            pady=(10, 4),
+        )
+
         ttk.Label(
             board_area,
             textvariable=self.turn_var,
-            font=("Segoe UI", 13, "bold"),
-        ).pack(pady=12)
+            font=("Segoe UI", 12, "bold"),
+        ).pack(pady=5)
 
         panel = ttk.Frame(main)
         panel.pack(
@@ -247,7 +275,7 @@ class ChessCompetitionApp:
 
         ttk.Label(
             config,
-            text="Busca iterativa ate o limite de tempo.",
+            text="Busca iterativa com limite de tempo.",
             wraplength=320,
         ).grid(
             row=3,
@@ -322,6 +350,19 @@ class ChessCompetitionApp:
             wraplength=330,
         ).pack(anchor="w", pady=12)
 
+    def set_game_alert(
+        self,
+        text,
+        background,
+        foreground="#FFFFFF",
+    ):
+        self.game_alert_var.set(text)
+
+        self.game_alert.configure(
+            bg=background,
+            fg=foreground,
+        )
+
     def square_from_display(self, row, col):
         if self.our_color == chess.WHITE:
             return chess.square(col, 7 - row)
@@ -329,15 +370,6 @@ class ChessCompetitionApp:
         return chess.square(7 - col, row)
 
     def draw_piece(self, square, x, y):
-        """
-        Desenha uma peca com contorno contrastante.
-
-        Brancas: preenchimento claro e borda escura.
-        Pretas: preenchimento escuro e borda clara.
-
-        O contorno e criado por camadas deslocadas
-        porque o Canvas nao oferece stroke em textos.
-        """
         piece = self.board.piece_at(square)
 
         if piece is None:
@@ -355,7 +387,6 @@ class ChessCompetitionApp:
         center_x = x + self.square_size / 2
         center_y = y + self.square_size / 2
 
-        # Contorno de dois pixels em oito direcoes.
         for dx, dy in OUTLINE_OFFSETS:
             self.canvas.create_text(
                 center_x + dx,
@@ -366,7 +397,6 @@ class ChessCompetitionApp:
                 tags=("piece",),
             )
 
-        # Camada principal da peca.
         self.canvas.create_text(
             center_x,
             center_y,
@@ -376,8 +406,21 @@ class ChessCompetitionApp:
             tags=("piece",),
         )
 
+    def get_checked_king_square(self):
+        """
+        Retorna a casa do rei ameacado.
+
+        No python-chess, board.is_check() considera
+        o jogador que possui a vez.
+        """
+        if not self.board.is_check():
+            return None
+
+        return self.board.king(self.board.turn)
+
     def draw_board(self):
         self.canvas.delete("all")
+
         legal_targets = set()
 
         if self.selected is not None:
@@ -387,9 +430,17 @@ class ChessCompetitionApp:
                 if move.from_square == self.selected
             }
 
+        checked_king_square = (
+            self.get_checked_king_square()
+        )
+
+        is_checkmate = self.board.is_checkmate()
+
         for row in range(8):
             for col in range(8):
-                square = self.square_from_display(row, col)
+                square = self.square_from_display(
+                    row, col
+                )
 
                 x = col * self.square_size
                 y = row * self.square_size
@@ -410,6 +461,15 @@ class ChessCompetitionApp:
                 if square == self.selected:
                     color = SELECTED
 
+                # Xeque tem prioridade sobre selecao
+                # e sobre a marcacao da ultima jogada.
+                if square == checked_king_square:
+                    color = (
+                        CHECKMATE_SQUARE
+                        if is_checkmate
+                        else CHECK_SQUARE
+                    )
+
                 self.canvas.create_rectangle(
                     x,
                     y,
@@ -418,6 +478,17 @@ class ChessCompetitionApp:
                     fill=color,
                     outline=color,
                 )
+
+                # Borda adicional no rei ameacado.
+                if square == checked_king_square:
+                    self.canvas.create_rectangle(
+                        x + 3,
+                        y + 3,
+                        x + self.square_size - 3,
+                        y + self.square_size - 3,
+                        outline=CHECK_BORDER,
+                        width=3,
+                    )
 
                 if square in legal_targets:
                     radius = 9
@@ -433,7 +504,6 @@ class ChessCompetitionApp:
                         outline="",
                     )
 
-                # Peca com contraste aprimorado.
                 self.draw_piece(square, x, y)
 
                 if col == 0:
@@ -452,6 +522,140 @@ class ChessCompetitionApp:
                         font=("Segoe UI", 9, "bold"),
                     )
 
+    def get_game_result(self):
+        """
+        Identifica o resultado do ponto de vista
+        do ChessEngine, independentemente da cor.
+        """
+        outcome = self.board.outcome(
+            claim_draw=True
+        )
+
+        if outcome is None:
+            return None
+
+        if outcome.winner is None:
+            return {
+                "title": "EMPATE",
+                "message": (
+                    "A partida terminou empatada.\n\n"
+                    f"Resultado: {outcome.result()}"
+                ),
+                "background": "#D9A441",
+                "foreground": "#181818",
+                "kind": "draw",
+            }
+
+        if outcome.winner == self.our_color:
+            return {
+                "title": "VITORIA DO CHESSENGINE!",
+                "message": (
+                    "Nosso motor venceu a partida!\n\n"
+                    f"Resultado: {outcome.result()}"
+                ),
+                "background": "#237A4B",
+                "foreground": "#FFFFFF",
+                "kind": "win",
+            }
+
+        return {
+            "title": "DERROTA DO CHESSENGINE",
+            "message": (
+                "O adversario venceu a partida.\n\n"
+                f"Resultado: {outcome.result()}"
+            ),
+            "background": "#B83232",
+            "foreground": "#FFFFFF",
+            "kind": "loss",
+        }
+
+    def update_game_alert(self):
+        """
+        Atualiza o painel visual de estado
+        da partida.
+        """
+        if not self.started:
+            self.set_game_alert(
+                "Aguardando inicio da partida",
+                "#E5E7EB",
+                "#333333",
+            )
+            return
+
+        result = self.get_game_result()
+
+        if result is not None:
+            self.set_game_alert(
+                result["title"],
+                result["background"],
+                result["foreground"],
+            )
+            return
+
+        if self.board.is_check():
+            checked_player = (
+                "NOSSO REI"
+                if self.board.turn == self.our_color
+                else "REI ADVERSARIO"
+            )
+
+            self.set_game_alert(
+                f"XEQUE! {checked_player} AMEACADO",
+                "#C63D3D",
+            )
+            return
+
+        if self.board.turn == self.our_color:
+            self.set_game_alert(
+                "VEZ DO CHESSENGINE",
+                "#285F8F",
+            )
+        else:
+            self.set_game_alert(
+                "VEZ DO ADVERSARIO",
+                "#455466",
+            )
+
+    def notify_game_over(self):
+        """
+        Mostra um aviso somente uma vez
+        quando a partida termina.
+        """
+        if self.finished_notified:
+            return
+
+        result = self.get_game_result()
+
+        if result is None:
+            return
+
+        self.finished_notified = True
+
+        self.status_var.set(
+            result["message"].replace("\n", " ")
+        )
+
+        if result["kind"] == "win":
+            messagebox.showinfo(
+                "Chess Challenge III — Vitoria",
+                result["message"],
+                parent=self.root,
+            )
+
+        elif result["kind"] == "loss":
+            messagebox.showwarning(
+                "Chess Challenge III — Derrota",
+                result["message"],
+                parent=self.root,
+            )
+
+        else:
+            messagebox.showinfo(
+                "Chess Challenge III — Empate",
+                result["message"],
+                parent=self.root,
+            )
+
     def start_game(self):
         if self.thinking:
             messagebox.showwarning(
@@ -469,7 +673,9 @@ class ChessCompetitionApp:
 
         try:
             depth = int(self.depth_var.get())
-            think_time = float(self.time_var.get())
+            think_time = float(
+                self.time_var.get()
+            )
 
             if not (1 <= depth <= 30):
                 raise ValueError(
@@ -489,7 +695,9 @@ class ChessCompetitionApp:
             return
 
         try:
-            new_engine = create_competition_engine(depth)
+            new_engine = create_competition_engine(
+                depth
+            )
         except Exception as exc:
             messagebox.showerror(
                 "Erro ao iniciar motor",
@@ -512,6 +720,7 @@ class ChessCompetitionApp:
 
         self.selected = None
         self.last_move = None
+        self.finished_notified = False
 
         self.started = True
         self.generation += 1
@@ -520,10 +729,17 @@ class ChessCompetitionApp:
             "%Y%m%d_%H%M%S_%f"
         )
 
-        self.log_dir = LOG_DIR / f"game_{timestamp}"
-        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.log_dir = (
+            LOG_DIR / f"game_{timestamp}"
+        )
+
+        self.log_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
         self.analysis_var.set("Nenhuma analise.")
+
         self.status_var.set(
             "Motor iniciado: rede neural 40%, "
             "128 inferencias, busca por tempo."
@@ -536,31 +752,46 @@ class ChessCompetitionApp:
         if not self.started or self.thinking:
             return
 
-        if self.board.is_game_over(claim_draw=True):
+        if self.board.is_game_over(
+            claim_draw=True
+        ):
             return
 
         if self.board.turn == self.our_color:
             self.status_var.set(
-                "E a vez do motor. Clique em Calcular jogada."
+                "E a vez do motor. "
+                "Clique em Calcular jogada."
             )
             return
 
         col = event.x // self.square_size
         row = event.y // self.square_size
 
-        if not (0 <= row < 8 and 0 <= col < 8):
+        if not (
+            0 <= row < 8
+            and 0 <= col < 8
+        ):
             return
 
-        square = self.square_from_display(row, col)
+        square = self.square_from_display(
+            row, col
+        )
+
         piece = self.board.piece_at(square)
 
         if self.selected is None:
-            if piece and piece.color == self.board.turn:
+            if (
+                piece
+                and piece.color == self.board.turn
+            ):
                 self.selected = square
                 self.draw_board()
             return
 
-        if piece and piece.color == self.board.turn:
+        if (
+            piece
+            and piece.color == self.board.turn
+        ):
             self.selected = square
             self.draw_board()
             return
@@ -576,20 +807,30 @@ class ChessCompetitionApp:
         ]
 
         if not moves:
-            self.status_var.set("Movimento ilegal.")
+            self.status_var.set(
+                "Movimento ilegal. "
+                "Se o rei estiver em xeque, "
+                "e necessario resolver a ameaca."
+            )
             self.draw_board()
             return
 
         if len(moves) > 1:
-            move = self.choose_promotion(moves)
+            move = self.choose_promotion(
+                moves
+            )
 
             if move is None:
                 self.draw_board()
                 return
+
         else:
             move = moves[0]
 
-        self.apply_move(move, "opponent")
+        self.apply_move(
+            move,
+            "opponent",
+        )
 
     def choose_promotion(self, moves):
         dialog = tk.Toplevel(self.root)
@@ -606,7 +847,10 @@ class ChessCompetitionApp:
             padding=12,
         ).pack()
 
-        frame = ttk.Frame(dialog, padding=10)
+        frame = ttk.Frame(
+            dialog,
+            padding=10,
+        )
         frame.pack()
 
         options = [
@@ -625,6 +869,7 @@ class ChessCompetitionApp:
                 ),
                 None,
             )
+
             dialog.destroy()
 
         for label, piece_type in options:
@@ -632,7 +877,10 @@ class ChessCompetitionApp:
                 frame,
                 text=label,
                 command=lambda p=piece_type: select(p),
-            ).pack(side=tk.LEFT, padx=4)
+            ).pack(
+                side=tk.LEFT,
+                padx=4,
+            )
 
         dialog.wait_window()
         return result["move"]
@@ -641,21 +889,35 @@ class ChessCompetitionApp:
         if not self.started or self.thinking:
             return
 
-        if self.board.is_game_over(claim_draw=True):
-            self.status_var.set("A partida terminou.")
+        if self.board.is_game_over(
+            claim_draw=True
+        ):
+            self.status_var.set(
+                "A partida terminou."
+            )
             return
 
         if self.board.turn != self.our_color:
             self.status_var.set(
-                "Registre a jogada adversaria no tabuleiro."
+                "Registre a jogada adversaria "
+                "no tabuleiro."
             )
             return
 
         self.thinking = True
-        self.calculate_button.configure(state=tk.DISABLED)
-        self.status_var.set("Motor pensando...")
 
-        board_copy = self.board.copy(stack=True)
+        self.calculate_button.configure(
+            state=tk.DISABLED
+        )
+
+        self.status_var.set(
+            "Motor pensando..."
+        )
+
+        board_copy = self.board.copy(
+            stack=True
+        )
+
         generation = self.generation
 
         def worker():
@@ -664,9 +926,11 @@ class ChessCompetitionApp:
                     board_copy,
                     time_limit=self.think_time,
                 )
+
                 self.results.put(
                     (generation, result, None)
                 )
+
             except Exception as exc:
                 self.results.put(
                     (generation, None, str(exc))
@@ -688,6 +952,7 @@ class ChessCompetitionApp:
                     continue
 
                 self.thinking = False
+
                 self.calculate_button.configure(
                     state=tk.NORMAL
                 )
@@ -700,25 +965,52 @@ class ChessCompetitionApp:
 
                 if (
                     result.move is None
-                    or result.move not in self.board.legal_moves
+                    or result.move
+                    not in self.board.legal_moves
                 ):
                     self.status_var.set(
-                        "O motor nao retornou um lance legal."
+                        "O motor nao retornou "
+                        "um lance legal."
                     )
                     continue
 
-                san = self.board.san(result.move)
-                metrics = result.metrics
+                san = self.board.san(
+                    result.move
+                )
+
+                metrics = result.metrics or {}
+
+                if metrics.get("early_stopped", 0):
+                    stop_reason = (
+                        "Jogada estabilizada"
+                    )
+                elif result.status == "forced":
+                    stop_reason = (
+                        "Unico lance legal"
+                    )
+                elif result.status == "timeout":
+                    stop_reason = (
+                        "Limite de tempo"
+                    )
+                else:
+                    stop_reason = (
+                        "Busca concluida"
+                    )
 
                 self.analysis_var.set(
-                    f"Jogada: {san} ({result.move.uci()})\n"
-                    f"Avaliacao: {result.score:+} cp\n"
-                    f"Profundidade concluida: {result.depth}\n"
-                    f"Tempo: {result.elapsed:.3f}s\n"
-                    f"Nos: {metrics.get('total_nodes', 0)}\n"
+                    f"Jogada: {san} "
+                    f"({result.move.uci()})\n"
+                    f"Avaliacao: "
+                    f"{result.score:+} cp\n"
+                    f"Profundidade: "
+                    f"{result.depth}\n"
+                    f"Tempo: "
+                    f"{result.elapsed:.3f}s\n"
+                    f"Nos: "
+                    f"{metrics.get('total_nodes', 0)}\n"
                     f"Inferencias neurais: "
                     f"{metrics.get('neural_inferences', 0)}\n"
-                    f"Status: {result.status}"
+                    f"Parada: {stop_reason}"
                 )
 
                 self.apply_move(
@@ -730,9 +1022,17 @@ class ChessCompetitionApp:
         except queue.Empty:
             pass
 
-        self.root.after(100, self.poll_results)
+        self.root.after(
+            100,
+            self.poll_results,
+        )
 
-    def apply_move(self, move, player, result=None):
+    def apply_move(
+        self,
+        move,
+        player,
+        result=None,
+    ):
         if move not in self.board.legal_moves:
             return
 
@@ -743,18 +1043,28 @@ class ChessCompetitionApp:
         self.board.push(move)
         self.last_move = move
 
-        metrics = result.metrics if result else {}
+        metrics = (
+            result.metrics or {}
+            if result
+            else {}
+        )
 
         record = {
             "ply": self.board.ply(),
             "player": player,
-            "color": "white" if color else "black",
+            "color": (
+                "white" if color else "black"
+            ),
             "san": san,
             "uci": move.uci(),
             "fen_before": fen_before,
             "fen_after": self.board.fen(),
-            "score_cp": result.score if result else "",
-            "depth": result.depth if result else "",
+            "score_cp": (
+                result.score if result else ""
+            ),
+            "depth": (
+                result.depth if result else ""
+            ),
             "elapsed_seconds": (
                 round(result.elapsed, 4)
                 if result else ""
@@ -786,14 +1096,34 @@ class ChessCompetitionApp:
                 "Calcule nossa resposta."
             )
 
-        if self.board.is_game_over(claim_draw=True):
+        if self.board.is_checkmate():
             self.status_var.set(
-                "Partida encerrada: "
-                f"{self.board.result(claim_draw=True)}"
+                "XEQUE-MATE! Partida encerrada."
             )
+
+        elif self.board.is_check():
+            if self.board.turn == self.our_color:
+                self.status_var.set(
+                    "XEQUE! Nosso rei esta ameaçado."
+                )
+            else:
+                self.status_var.set(
+                    "XEQUE! O rei adversario "
+                    "esta ameaçado."
+                )
 
         self.refresh()
         self.save_logs()
+
+        # O aviso e exibido depois do tabuleiro
+        # ser redesenhado, preservando o resultado.
+        if self.board.is_game_over(
+            claim_draw=True
+        ):
+            self.root.after(
+                50,
+                self.notify_game_over,
+            )
 
     def undo(self):
         if (
@@ -821,11 +1151,15 @@ class ChessCompetitionApp:
         )
 
         self.selected = None
+        self.finished_notified = False
+
         self.analysis_var.set(
             "Ultima jogada desfeita."
         )
+
         self.status_var.set(
-            "Jogada desfeita. Confira o tabuleiro fisico."
+            "Jogada desfeita. "
+            "Confira o tabuleiro fisico."
         )
 
         if self.engine is not None:
@@ -836,31 +1170,63 @@ class ChessCompetitionApp:
 
     def refresh(self):
         self.draw_board()
+        self.update_game_alert()
 
         if not self.started:
-            self.turn_var.set("Partida nao iniciada")
-        elif self.board.is_game_over(claim_draw=True):
-            self.turn_var.set("Partida encerrada")
+            self.turn_var.set(
+                "Partida nao iniciada"
+            )
+
+        elif self.board.is_game_over(
+            claim_draw=True
+        ):
+            result = self.get_game_result()
+
+            if result is not None:
+                self.turn_var.set(
+                    result["title"]
+                )
+            else:
+                self.turn_var.set(
+                    "Partida encerrada"
+                )
+
         else:
             color = (
                 "Brancas"
                 if self.board.turn == chess.WHITE
                 else "Pretas"
             )
+
             player = (
                 "Nosso motor"
                 if self.board.turn == self.our_color
                 else "Adversario"
             )
-            self.turn_var.set(
-                f"Vez: {color} — {player}"
+
+            suffix = (
+                " — XEQUE!"
+                if self.board.is_check()
+                else ""
             )
 
-        self.history.configure(state=tk.NORMAL)
-        self.history.delete("1.0", tk.END)
+            self.turn_var.set(
+                f"Vez: {color} — {player}{suffix}"
+            )
+
+        self.history.configure(
+            state=tk.NORMAL
+        )
+
+        self.history.delete(
+            "1.0",
+            tk.END,
+        )
 
         for record in self.records:
-            number = (record["ply"] + 1) // 2
+            number = (
+                record["ply"] + 1
+            ) // 2
 
             prefix = (
                 f"{number}."
@@ -876,12 +1242,16 @@ class ChessCompetitionApp:
 
             self.history.insert(
                 tk.END,
-                f"{prefix:<6} {record['san']:<8} "
+                f"{prefix:<6} "
+                f"{record['san']:<8} "
                 f"{player}\n",
             )
 
         self.history.see(tk.END)
-        self.history.configure(state=tk.DISABLED)
+
+        self.history.configure(
+            state=tk.DISABLED
+        )
 
     def save_logs(self):
         if self.log_dir is None:
@@ -892,54 +1262,82 @@ class ChessCompetitionApp:
         game.headers["Event"] = (
             "Chess Challenge III - Competicao"
         )
+
         game.headers["White"] = (
             "ChessEngine"
             if self.our_color == chess.WHITE
             else "Adversario"
         )
+
         game.headers["Black"] = (
             "ChessEngine"
             if self.our_color == chess.BLACK
             else "Adversario"
         )
+
         game.headers["Result"] = (
-            self.board.result(claim_draw=True)
+            self.board.result(
+                claim_draw=True
+            )
         )
 
-        game.headers["OurEvaluator"] = "HybridEvaluator"
-        game.headers["NeuralModel"] = MODEL_PATH.name
-        game.headers["NeuralWeight"] = str(NEURAL_WEIGHT)
-        game.headers["NeuralBudget"] = str(NEURAL_BUDGET)
-        game.headers["OurDepth"] = str(self.depth)
-        game.headers["OurTimePerMove"] = str(self.think_time)
+        game.headers["OurEvaluator"] = (
+            "HybridEvaluator"
+        )
+        game.headers["NeuralModel"] = (
+            MODEL_PATH.name
+        )
+        game.headers["NeuralWeight"] = (
+            str(NEURAL_WEIGHT)
+        )
+        game.headers["NeuralBudget"] = (
+            str(NEURAL_BUDGET)
+        )
+        game.headers["OurDepth"] = (
+            str(self.depth)
+        )
+        game.headers["OurTimePerMove"] = (
+            str(self.think_time)
+        )
 
         node = game
 
         for move in self.board.move_stack:
             node = node.add_variation(move)
 
-        with (self.log_dir / "game.pgn").open(
+        with (
+            self.log_dir / "game.pgn"
+        ).open(
             "w",
             encoding="utf-8",
         ) as file:
             print(game, file=file)
 
         if self.records:
-            with (self.log_dir / "moves.csv").open(
+            with (
+                self.log_dir / "moves.csv"
+            ).open(
                 "w",
                 newline="",
                 encoding="utf-8",
             ) as file:
                 writer = csv.DictWriter(
                     file,
-                    fieldnames=list(self.records[0].keys()),
+                    fieldnames=list(
+                        self.records[0].keys()
+                    ),
                 )
+
                 writer.writeheader()
-                writer.writerows(self.records)
+                writer.writerows(
+                    self.records
+                )
 
         state = {
             "our_color": (
-                "white" if self.our_color else "black"
+                "white"
+                if self.our_color
+                else "black"
             ),
             "depth": self.depth,
             "think_time": self.think_time,
@@ -947,6 +1345,7 @@ class ChessCompetitionApp:
             "neural_weight": NEURAL_WEIGHT,
             "neural_budget": NEURAL_BUDGET,
             "use_full_time": True,
+            "early_stop_enabled": True,
             "fen": self.board.fen(),
             "moves": [
                 record["uci"]
@@ -955,7 +1354,9 @@ class ChessCompetitionApp:
             "records": self.records,
         }
 
-        temporary = self.log_dir / "state.tmp"
+        temporary = (
+            self.log_dir / "state.tmp"
+        )
 
         with temporary.open(
             "w",
