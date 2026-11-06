@@ -31,6 +31,7 @@ def negamax(
     metrics: SearchMetrics | None = None,
     ordering_heuristics: MoveOrderingHeuristics | None = None,
     score_quiet_checks: bool = True,
+    use_pvs: bool = True,
 ) -> int:
     timer.check()
 
@@ -95,24 +96,43 @@ def negamax(
         score_quiet_checks=score_quiet_checks,
     )
 
-    for move in moves:
+    for move_index, move in enumerate(moves):
         timer.check()
         board.push(move)
 
         try:
-            score = -negamax(
-                board=board,
-                depth=depth - 1,
-                alpha=-beta,
-                beta=-alpha,
-                evaluator=evaluator,
-                timer=timer,
-                ply=ply + 1,
-                transposition_table=transposition_table,
-                metrics=metrics,
-                ordering_heuristics=ordering_heuristics,
-                score_quiet_checks=score_quiet_checks,
-            )
+            child_kwargs = {
+                "board": board,
+                "depth": depth - 1,
+                "evaluator": evaluator,
+                "timer": timer,
+                "ply": ply + 1,
+                "transposition_table": transposition_table,
+                "metrics": metrics,
+                "ordering_heuristics": ordering_heuristics,
+                "score_quiet_checks": score_quiet_checks,
+                "use_pvs": use_pvs,
+            }
+
+            if use_pvs and move_index > 0:
+                score = -negamax(
+                    alpha=-alpha - 1,
+                    beta=-alpha,
+                    **child_kwargs,
+                )
+
+                if alpha < score < beta:
+                    score = -negamax(
+                        alpha=-beta,
+                        beta=-alpha,
+                        **child_kwargs,
+                    )
+            else:
+                score = -negamax(
+                    alpha=-beta,
+                    beta=-alpha,
+                    **child_kwargs,
+                )
         finally:
             board.pop()
 
