@@ -51,6 +51,7 @@ class ChessEngine:
         tt_max_entries: int = 20_000,
         use_advanced_ordering: bool = True,
         score_quiet_checks: bool = True,
+        use_pvs: bool = True,
         use_full_time: bool = False,
         early_stop_enabled: bool = False,
     ):
@@ -74,6 +75,7 @@ class ChessEngine:
 
         self.use_advanced_ordering = use_advanced_ordering
         self.score_quiet_checks = score_quiet_checks
+        self.use_pvs = use_pvs
 
         self.transposition_table = (
             TranspositionTable(max_entries=tt_max_entries)
@@ -266,27 +268,50 @@ class ChessEngine:
             )
 
             try:
-                for move in ordered:
+                for move_index, move in enumerate(ordered):
                     timer.check()
 
                     board.push(move)
 
                     try:
-                        score = -negamax(
-                            board=board,
-                            depth=depth - 1,
-                            alpha=-beta,
-                            beta=-alpha,
-                            evaluator=self.evaluator,
-                            timer=timer,
-                            ply=1,
-                            transposition_table=(
+                        child_kwargs = {
+                            "board": board,
+                            "depth": depth - 1,
+                            "evaluator": self.evaluator,
+                            "timer": timer,
+                            "ply": 1,
+                            "transposition_table": (
                                 self.transposition_table
                             ),
-                            metrics=metrics,
-                            ordering_heuristics=ordering_heuristics,
-                            score_quiet_checks=self.score_quiet_checks,
-                        )
+                            "metrics": metrics,
+                            "ordering_heuristics": (
+                                ordering_heuristics
+                            ),
+                            "score_quiet_checks": (
+                                self.score_quiet_checks
+                            ),
+                            "use_pvs": self.use_pvs,
+                        }
+
+                        if self.use_pvs and move_index > 0:
+                            score = -negamax(
+                                alpha=-alpha - 1,
+                                beta=-alpha,
+                                **child_kwargs,
+                            )
+
+                            if alpha < score < beta:
+                                score = -negamax(
+                                    alpha=-beta,
+                                    beta=-alpha,
+                                    **child_kwargs,
+                                )
+                        else:
+                            score = -negamax(
+                                alpha=-beta,
+                                beta=-alpha,
+                                **child_kwargs,
+                            )
                     finally:
                         board.pop()
 

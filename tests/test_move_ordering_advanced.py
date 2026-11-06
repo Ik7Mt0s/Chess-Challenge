@@ -7,6 +7,7 @@ from chess_engine.search.move_ordering import (
     MoveOrderingHeuristics,
     move_score,
     order_moves,
+    static_exchange_evaluation,
 )
 from chess_engine.search.negamax import INFINITY, negamax
 from chess_engine.utils.time_manager import TimeManager
@@ -382,3 +383,71 @@ def test_killer_priority_preserved_in_optimized_strategy():
     )
 
     assert ordered[0] == killer
+
+
+def test_see_scores_free_queen_capture():
+    board = chess.Board(
+        "4k3/8/8/8/3q4/3R4/8/4K3 w - - 0 1"
+    )
+    move = chess.Move.from_uci("d3d4")
+
+    assert static_exchange_evaluation(board, move) == 900
+
+
+def test_see_scores_losing_queen_capture():
+    board = chess.Board(
+        "8/8/8/4k3/3p4/3Q4/8/4K3 w - - 0 1"
+    )
+    move = chess.Move.from_uci("d3d4")
+
+    assert static_exchange_evaluation(board, move) == -800
+
+
+def test_see_handles_en_passant():
+    board = chess.Board(
+        "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1"
+    )
+    move = chess.Move.from_uci("e5d6")
+
+    assert board.is_en_passant(move)
+    assert static_exchange_evaluation(board, move) == 100
+
+
+def test_see_includes_promotion_gain():
+    board = chess.Board(
+        "1r2k3/P7/8/8/8/8/8/4K3 w - - 0 1"
+    )
+    move = chess.Move.from_uci("a7b8q")
+
+    assert static_exchange_evaluation(board, move) == 1300
+
+
+def test_see_preserves_board_and_history():
+    board = chess.Board()
+    for san in ("e4", "d5", "exd5", "Qxd5", "Nc3"):
+        board.push_san(san)
+
+    move = chess.Move.from_uci("d5g2")
+    original_fen = board.fen()
+    original_history = list(board.move_stack)
+
+    static_exchange_evaluation(board, move)
+
+    assert board.fen() == original_fen
+    assert board.move_stack == original_history
+
+
+def test_see_ordering_prioritizes_non_losing_capture():
+    board = chess.Board(
+        "8/8/8/4k3/3p3q/3Q3R/8/K7 w - - 0 1"
+    )
+    winning = chess.Move.from_uci("h3h4")
+    losing = chess.Move.from_uci("d3d4")
+
+    ordered = order_moves(
+        board,
+        [losing, winning],
+        use_see=True,
+    )
+
+    assert ordered == [winning, losing]
