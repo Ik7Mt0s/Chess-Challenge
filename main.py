@@ -35,15 +35,32 @@ SELECTED = "#F6F669"
 LAST_MOVE = "#BACA44"
 TARGET = "#4D8754"
 
+WHITE_PIECE_FILL = "#FFFDF5"
+WHITE_PIECE_OUTLINE = "#242A30"
+BLACK_PIECE_FILL = "#202428"
+BLACK_PIECE_OUTLINE = "#F5F0DD"
+
+PIECE_FONT = ("Segoe UI Symbol", 46)
+OUTLINE_OFFSETS = (
+    (-2, -2), (-2, 0), (-2, 2),
+    (0, -2),           (0, 2),
+    (2, -2),  (2, 0),  (2, 2),
+)
+
+# Utilizamos glifos preenchidos para as duas cores.
+# A cor das pecas e determinada pelo preenchimento
+# e pelo contorno, nao pelo simbolo Unicode.
 PIECES = {
-    "K": "♔", "Q": "♕", "R": "♖",
-    "B": "♗", "N": "♘", "P": "♙",
+    "K": "♚", "Q": "♛", "R": "♜",
+    "B": "♝", "N": "♞", "P": "♟",
     "k": "♚", "q": "♛", "r": "♜",
     "b": "♝", "n": "♞", "p": "♟",
 }
 
 
-def create_competition_engine(depth: int = COMPETITION_DEPTH):
+def create_competition_engine(
+    depth: int = COMPETITION_DEPTH,
+):
     """
     Configuracao preservada para a competicao.
 
@@ -311,6 +328,54 @@ class ChessCompetitionApp:
 
         return chess.square(7 - col, row)
 
+    def draw_piece(self, square, x, y):
+        """
+        Desenha uma peca com contorno contrastante.
+
+        Brancas: preenchimento claro e borda escura.
+        Pretas: preenchimento escuro e borda clara.
+
+        O contorno e criado por camadas deslocadas
+        porque o Canvas nao oferece stroke em textos.
+        """
+        piece = self.board.piece_at(square)
+
+        if piece is None:
+            return
+
+        symbol = PIECES[piece.symbol()]
+
+        if piece.color == chess.WHITE:
+            fill = WHITE_PIECE_FILL
+            outline = WHITE_PIECE_OUTLINE
+        else:
+            fill = BLACK_PIECE_FILL
+            outline = BLACK_PIECE_OUTLINE
+
+        center_x = x + self.square_size / 2
+        center_y = y + self.square_size / 2
+
+        # Contorno de dois pixels em oito direcoes.
+        for dx, dy in OUTLINE_OFFSETS:
+            self.canvas.create_text(
+                center_x + dx,
+                center_y + dy,
+                text=symbol,
+                font=PIECE_FONT,
+                fill=outline,
+                tags=("piece",),
+            )
+
+        # Camada principal da peca.
+        self.canvas.create_text(
+            center_x,
+            center_y,
+            text=symbol,
+            font=PIECE_FONT,
+            fill=fill,
+            tags=("piece",),
+        )
+
     def draw_board(self):
         self.canvas.delete("all")
         legal_targets = set()
@@ -368,20 +433,8 @@ class ChessCompetitionApp:
                         outline="",
                     )
 
-                piece = self.board.piece_at(square)
-
-                if piece:
-                    self.canvas.create_text(
-                        x + self.square_size / 2,
-                        y + self.square_size / 2,
-                        text=PIECES[piece.symbol()],
-                        font=("Segoe UI Symbol", 46),
-                        fill=(
-                            "#FFFFFF"
-                            if piece.color == chess.WHITE
-                            else "#181818"
-                        ),
-                    )
+                # Peca com contraste aprimorado.
+                self.draw_piece(square, x, y)
 
                 if col == 0:
                     self.canvas.create_text(
